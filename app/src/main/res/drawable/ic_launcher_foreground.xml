@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ════════════════════════════════════════════
+         CHIPMO logo
+         1. Outer CLOSED ring (full circle, dark navy)
+         2. Middle C-arc opening right
+         3. Inner C-arc opening right
+         4. Orange "chess-pawn head" (rounded right, notched left)
+         ════════════════════════════════════════════ -->
+
+    <!-- 1. Outer closed ring -->
+    <path
+        android:fillColor="#1F2F4E"
+        android:fillType="evenOdd"
+        android:pathData="M 54,5 A 49,49 0 1,1 54,103 A 49,49 0 1,1 54,5 Z
+                          M 54,12 A 42,42 0 1,0 54,96 A 42,42 0 1,0 54,12 Z" />
+
+    <!-- 2. Middle C-arc (opens right) -->
+    <path
+        android:fillColor="#1F2F4E"
+        android:pathData="M 78,30 A 34,34 0 1,0 78,78 L 73,73 A 27,27 0 1,1 73,35 Z" />
+
+    <!-- 3. Inner C-arc (opens right) -->
+    <path
+        android:fillColor="#1F2F4E"
+        android:pathData="M 67,40.5 A 19,19 0 1,0 67,67.5 L 62,63 A 13,13 0 1,1 62,45 Z" />
+
+    <!-- 4. Orange chess-pawn head: rounded right + small V-notch on left -->
+    <path
+        android:fillColor="#E37A2B"
+        android:pathData="M 42,44
+                          L 56,40
+                          A 14,14 0 0,1 56,68
+                          L 42,64
+                          L 48,54 Z" />
+
+</vector>
