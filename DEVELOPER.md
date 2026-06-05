@@ -51,7 +51,8 @@
 
 | Файл | Үүрэг |
 |---|---|
-| **MainActivity.kt** | Compose UI host. Reflection-based Chainway SDK calls (method handle-ууд кэшлэгдсэн). Hardware trigger dispatching. Settings + scan-session persistence (restart дээр EPC сэргээнэ). |
+| **MainActivity.kt** | Нимгэн UI host. Compose tree, ActivityResult launcher (файл сонгох/хадгалах), hardware-trigger key dispatch. Бизнес логик байхгүй — бүгд ViewModel-д. |
+| **ScanViewModel.kt** | Бүх scan state + SDK/бизнес логик. `AndroidViewModel` — эргэлт (rotation)-д state болон reader survive хийнэ. Reflection-based Chainway SDK calls (method handle кэшлэгдсэн). Settings + scan-session persistence. Reader-ийг зөвхөн `onCleared()`-д free хийнэ (эргэлтэд биш). |
 
 ---
 
@@ -357,7 +358,9 @@ EpcBarcodeApp/
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── java/com/epcbc/
-│   │   │   │   ├── app/MainActivity.kt
+│   │   │   │   ├── app/
+│   │   │   │   │   ├── MainActivity.kt
+│   │   │   │   │   └── ScanViewModel.kt
 │   │   │   │   ├── core/
 │   │   │   │   │   ├── EpcDecoder.kt
 │   │   │   │   │   └── MatchEngine.kt

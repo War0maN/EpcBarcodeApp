@@ -6,6 +6,22 @@
 
 ---
 
+## [1.2.0] — 2026-06-05
+
+Архитектурын сайжруулалт: ViewModel.
+
+### Өөрчилсөн
+- **MVVM refactor** — бүх scan state болон SDK/бизнес логикийг `MainActivity`-аас шинэ `ScanViewModel : AndroidViewModel` рүү шилжүүлсэн. MainActivity одоо зөвхөн UI host (Compose tree, файл launcher, key dispatch).
+- **Эргэлт (rotation) дээр state хадгалагдана** — уншсан EPC жагсаалт, идэвхжсэн reader, scanning/finder төлөв эргэлтэд алдагдахаа больсон.
+
+### Засварласан (bug)
+- Өмнө эргэлт бүрд `MainActivity.onDestroy` нь hardware reader-ийг `free()` хийж, дахин идэвхжүүлэх шаардлагатай болгодог байсан. Одоо reader зөвхөн `ScanViewModel.onCleared()`-д (апп жинхэнэ хаагдахад) free хийгдэнэ.
+
+### Build
+- versionCode = 3, versionName = "1.2.0"
+
+---
+
 ## [1.1.0] — 2026-06-05
 
 Кодын чанар, найдвартай байдал, гүйцэтгэлийн сайжруулалт. Шинэ хэрэглэгчийн функц нэмээгүй — дотоод refactor.
@@ -125,3 +141,4 @@
 | 2026-06-02 | 0.8 | Performance optimization, settings persistence |
 | **2026-06-03** | **1.0.0** | **Production release. Documentation.** |
 | **2026-06-05** | **1.1.0** | **Refactor: MatchEngine wired, LRU кэш, session persistence, тестүүд, dead code цэвэрлэгээ** |
+| **2026-06-05** | **1.2.0** | **MVVM refactor: ScanViewModel, rotation-д state хадгалагдана** |
