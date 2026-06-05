@@ -39,7 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.epcbc.core.EpcDecoder
+import com.epcbc.core.MatchEngine
 import com.epcbc.data.PackingListReader
 import kotlinx.coroutines.delay
 
@@ -65,11 +65,9 @@ fun SkuDetailOverlay(
     onFilterChange: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    // Live-derive EPCs for this SKU from the master scanned list.
+    // Live-derive EPCs for this SKU from the master scanned list (shared matcher).
     val epcs: List<String> = remember(allScannedEpcs.toList(), item.barcode) {
-        allScannedEpcs.filter { epc ->
-            try { EpcDecoder.decode(epc, true).barcode == item.barcode } catch (_: Exception) { false }
-        }
+        MatchEngine.groupByBarcode(allScannedEpcs)[item.barcode]?.toList() ?: emptyList()
     }
 
     // Auto-derive a prefix from the first matched EPC.

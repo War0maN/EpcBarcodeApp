@@ -6,6 +6,29 @@
 
 ---
 
+## [1.1.0] — 2026-06-05
+
+Кодын чанар, найдвартай байдал, гүйцэтгэлийн сайжруулалт. Шинэ хэрэглэгчийн функц нэмээгүй — дотоод refactor.
+
+### Сайжруулсан
+- **MatchEngine** одоо бодитоор ашиглагдана — stateless `groupByBarcode()` + `summarize()` API. MatchView, SkuDetailOverlay, CSV export гурвуулаа нэг л matcher-аар тулгана (өмнө 3 газар давхардсан логик байсан).
+- **EpcDecoder кэш** хязгааргүй ConcurrentHashMap → 20k entry-тэй bounded LRU. Урт scanning session-д санах ой алдагдахгүй.
+- **Callback reflection** — `getEPC`/RSSI method handle-уудыг нэг удаа resolve хийж кэшлэнэ (секундэд 150+ tag-ийн халуун зам).
+
+### Нэмсэн
+- **Scan-session persistence** — уншсан EPC-үүд restart/crash хүртэл хадгалагдаж, дараа нь автоматаар сэргэнэ (`onPause`/`stopScan` дээр хадгална).
+- **Unit тест** — `MatchEngineTest` (7 тест). `PackingListReaderTest` instrumented тест (XLSX parsing).
+
+### Устгасан
+- `FilterBuilder.kt` — ашиглагдаагүй, бас алдаатай (GTIN→company-prefix буруу substring) dead code. Бодит hardware filter `MainActivity.applyHardwareFilter`-д хэвээр.
+- `RfidProbe.kt`, `ExampleUnitTest`, `ExampleInstrumentedTest` — scaffolding.
+
+### Build / Repo
+- versionCode = 2, versionName = "1.1.0"
+- Build артефакт (`app/release/*.apk`, baseline profiles) git track-ээс хасч `.gitignore`-д нэмсэн.
+
+---
+
 ## [1.0.0] — 2026-06-03
 
 Эхний production хувилбар. Бүх үндсэн функцууд бэлэн.
@@ -83,7 +106,6 @@
 - Hardware ptr=0 fallback (firmware variants)
 - Native XLSX writer (Apache POI эсвэл fastexcel)
 - Multi-language UI (English)
-- Background scan session
 - Inventory history (өмнөх сканнууд хадгалах)
 - Cloud sync (Firestore эсвэл REST)
 
@@ -102,3 +124,4 @@
 | 2026-06-01 | 0.7 | CSV export — 3 хүснэгт |
 | 2026-06-02 | 0.8 | Performance optimization, settings persistence |
 | **2026-06-03** | **1.0.0** | **Production release. Documentation.** |
+| **2026-06-05** | **1.1.0** | **Refactor: MatchEngine wired, LRU кэш, session persistence, тестүүд, dead code цэвэрлэгээ** |

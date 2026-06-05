@@ -42,15 +42,24 @@ object EpcDecoder {
         val indicator: Int? = null
     )
 
-    // Thread-safe memoization. Decoding the same EPC repeatedly (which is common — the
-    // app re-derives match data on every scan batch) is wasteful. The cache key is
-    // "$hex|$allowRaw" so the two fallback modes are stored independently.
-    private val cache = java.util.concurrent.ConcurrentHashMap<String, DecodeResult>()
+    // Bounded LRU memoization. Decoding the same EPC repeatedly (which is common — the
+    // UI re-derives match data on every recomposition) is wasteful. But each unique tag
+    // serial would otherwise live forever; a long scanning session of 100k+ distinct tags
+    // would leak memory. So we cap the cache and evict the least-recently-used entry.
+    // The cache key is "$hex|$allowRaw" so the two fallback modes are stored independently.
+    private const val MAX_CACHE_ENTRIES = 20_000
+
+    // access-order LinkedHashMap → eldest = least-recently-used. Not thread-safe on its own
+    // (accessOrder mutates on get), so every touch is guarded by synchronized(cache) below.
+    private val cache = object : LinkedHashMap<String, DecodeResult>(512, 0.75f, true) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, DecodeResult>): Boolean =
+            size > MAX_CACHE_ENTRIES
+    }
 
     fun decode(hexEpc: String, allowRawHexFallback: Boolean = true): DecodeResult {
         val hex = hexEpc.trim().uppercase()
         val cacheKey = if (allowRawHexFallback) "$hex|1" else "$hex|0"
-        cache[cacheKey]?.let { return it }
+        synchronized(cache) { cache[cacheKey] }?.let { return it }
         require(hex.matches(Regex("[0-9A-F]+"))) { "EPC must be hex: $hexEpc" }
 
         val result = if (hex.length == 24 && hex.startsWith("30")) {
@@ -64,7 +73,7 @@ object EpcDecoder {
                 header = header
             )
         }
-        cache[cacheKey] = result
+        synchronized(cache) { cache[cacheKey] = result }
         return result
     }
 

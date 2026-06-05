@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.epcbc.core.EpcDecoder
+import com.epcbc.core.MatchEngine
 import com.epcbc.data.PackingListReader
 
 /**
@@ -41,39 +41,16 @@ fun MatchView(
     onSelectItem: (PackingListReader.PackingItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Group scanned EPCs by their converted barcode (cached per scan-list snapshot).
-    val scannedByBarcode = remember(scannedEpcs.toList()) {
-        val map = mutableMapOf<String, MutableSet<String>>()
-        for (epc in scannedEpcs) {
-            try {
-                val result = EpcDecoder.decode(epc, allowRawHexFallback = true)
-                val bc = result.barcode ?: continue
-                map.getOrPut(bc) { mutableSetOf() }.add(epc)
-            } catch (_: Exception) {}
-        }
-        map
+    // One canonical match computation, recomputed when the scan list or packing list changes.
+    val summary = remember(packingList, scannedEpcs.toList()) {
+        MatchEngine.summarize(packingList, scannedEpcs)
     }
-
-    // Per-row read counts.
-    val rows = remember(packingList, scannedByBarcode) {
-        packingList.map { item ->
-            val read = scannedByBarcode[item.barcode]?.size ?: 0
-            Triple(item, read, item.qty)
-        }
-    }
-
-    // Totals — by PIECE count, not SKU count.
-    var matchedPieces = 0
-    var missingPieces = 0
-    var overPieces = 0
-    var totalExpected = 0
-    for ((_, read, qty) in rows) {
-        totalExpected += qty
-        matchedPieces += read.coerceAtMost(qty)
-        missingPieces += (qty - read).coerceAtLeast(0)
-        overPieces += (read - qty).coerceAtLeast(0)
-    }
-    val orphanCount = scannedEpcs.size - rows.sumOf { (_, read, _) -> read }
+    val rows = summary.rows
+    val matchedPieces = summary.matchedPieces
+    val missingPieces = summary.missingPieces
+    val overPieces = summary.overPieces
+    val totalExpected = summary.totalExpected
+    val orphanCount = summary.orphanCount
 
     Column(modifier = modifier) {
         // Progress summary
@@ -111,12 +88,12 @@ fun MatchView(
         HorizontalDivider()
 
         LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            items(rows, key = { (item, _, _) -> item.barcode }) { (item, read, qty) ->
+            items(rows, key = { it.item.barcode }) { row ->
                 PackingRow(
-                    item = item,
-                    read = read,
-                    qty = qty,
-                    onClick = { onSelectItem(item) }
+                    item = row.item,
+                    read = row.read,
+                    qty = row.qty,
+                    onClick = { onSelectItem(row.item) }
                 )
                 HorizontalDivider()
             }

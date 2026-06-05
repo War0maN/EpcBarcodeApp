@@ -80,8 +80,8 @@ EpcBarcodeApp/
 ├── app/
 │   ├── src/main/java/com/epcbc/
 │   │   ├── app/           Compose UI + MainActivity
-│   │   ├── core/          EpcDecoder, FilterBuilder, MatchEngine
-│   │   ├── scan/          EpcStream, RfidProbe
+│   │   ├── core/          EpcDecoder, MatchEngine
+│   │   ├── scan/          EpcStream
 │   │   └── data/          PackingListReader
 │   ├── src/test/          JUnit unit tests
 │   ├── libs/              Chainway DeviceAPI .aar

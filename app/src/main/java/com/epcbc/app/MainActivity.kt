@@ -25,6 +25,7 @@ import com.epcbc.app.ui.SettingsDialog
 import com.epcbc.app.ui.SkuDetailOverlay
 import com.epcbc.app.ui.theme.EpcBarcodeappTheme
 import com.epcbc.core.EpcDecoder
+import com.epcbc.core.MatchEngine
 import com.epcbc.data.PackingListReader
 import com.epcbc.scan.EpcStream
 import java.util.Timer
@@ -47,6 +48,12 @@ class MainActivity : ComponentActivity() {
     private val epcStream = EpcStream()
     private val seenEpcs: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
     private var drainTimer: Timer? = null
+
+    // Reflection method handles resolved once on the SDK callback thread and reused.
+    // getEPC fires for every tag (150+/sec) — re-resolving it each time is pure waste.
+    // @Volatile so the resolved handle publishes safely to any thread that calls in.
+    @Volatile private var getEpcMethod: java.lang.reflect.Method? = null
+    @Volatile private var getRssiMethod: java.lang.reflect.Method? = null
 
     // Scan settings
     private var outputPower by mutableStateOf(30)         // dBm, 1..30
@@ -77,8 +84,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         Log.i(TAG, "MainActivity.onCreate")
 
-        // Load persisted settings before anything reads them.
+        // Load persisted settings + the previous scan session before anything reads them.
         loadSettings()
+        restoreSession()
 
         setContent {
             EpcBarcodeappTheme {
@@ -106,6 +114,7 @@ class MainActivity : ComponentActivity() {
                             scannedEpcs.clear()
                             seenEpcs.clear()
                             epcStream.drain()
+                            saveSession()   // persist the cleared (empty) state
                         },
                         onOpenSettings = { showSettings = true },
                         outputPower = outputPower,
@@ -197,13 +206,8 @@ class MainActivity : ComponentActivity() {
     private fun exportResultsToCsv(uri: Uri) {
         thread(start = true, name = "ExportCsv") {
             try {
-                // Group scanned EPCs by their converted barcode
-                val readByBarcode = mutableMapOf<String, MutableList<String>>()
-                for (epc in scannedEpcs.toList()) {
-                    val decoded = try { EpcDecoder.decode(epc, true) } catch (_: Throwable) { null }
-                    val bc = decoded?.barcode ?: continue
-                    readByBarcode.getOrPut(bc) { mutableListOf() }.add(epc)
-                }
+                // Group scanned EPCs by their converted barcode (shared with the live UI matcher).
+                val readByBarcode = MatchEngine.groupByBarcode(scannedEpcs.toList())
                 val packingByBarcode = packingList.associateBy { it.barcode }
 
                 // Split scanned EPCs into "matched" (in packing list) and "orphan" (not in list)
@@ -212,15 +216,16 @@ class MainActivity : ComponentActivity() {
 
                 val matchedRows = mutableListOf<MatchedRow>()
                 val orphanRows = mutableListOf<OrphanRow>()
-                for (epc in scannedEpcs.toList()) {
-                    val decoded = try { EpcDecoder.decode(epc, true) } catch (_: Throwable) { null }
-                    val bc = decoded?.barcode ?: ""
-                    val format = decoded?.format ?: "UNKNOWN"
-                    val item = packingByBarcode[bc]
-                    if (item != null) {
-                        matchedRows.add(MatchedRow(epc, bc, item))
-                    } else {
-                        orphanRows.add(OrphanRow(epc, bc, format))
+                for ((barcode, epcsForBarcode) in readByBarcode) {
+                    val item = packingByBarcode[barcode]
+                    for (epc in epcsForBarcode) {
+                        if (item != null) {
+                            matchedRows.add(MatchedRow(epc, barcode, item))
+                        } else {
+                            // Only orphans need a re-decode (for the format column); they're typically few.
+                            val format = try { EpcDecoder.decode(epc, true).format } catch (_: Throwable) { "UNKNOWN" }
+                            orphanRows.add(OrphanRow(epc, barcode, format))
+                        }
                     }
                 }
 
@@ -368,7 +373,9 @@ class MainActivity : ComponentActivity() {
                         if (method.name == "callback" && args != null && args.isNotEmpty()) {
                             val tagInfo = args[0]
                             try {
-                                val epc = tagInfo.javaClass.getMethod("getEPC").invoke(tagInfo) as? String
+                                val epcMethod = getEpcMethod
+                                    ?: tagInfo.javaClass.getMethod("getEPC").also { getEpcMethod = it }
+                                val epc = epcMethod.invoke(tagInfo) as? String
                                 if (epc != null) {
                                     epcStream.push(epc)   // O(1) enqueue, never blocks
 
@@ -497,6 +504,39 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** The scan-session backing file: one EPC per line, newest first (display order). */
+    private fun sessionFile() = java.io.File(filesDir, SESSION_FILE)
+
+    /** Persist the current scanned-EPC list so it survives an app restart/crash. */
+    private fun saveSession() {
+        val snapshot = scannedEpcs.toList()
+        thread(start = true, name = "SaveSession") {
+            try {
+                sessionFile().writeText(snapshot.joinToString("\n"))
+            } catch (e: Throwable) {
+                Log.e(TAG, "saveSession failed", e)
+            }
+        }
+    }
+
+    /** Restore the scanned-EPC list saved by a previous session, if any. */
+    private fun restoreSession() {
+        try {
+            val f = sessionFile()
+            if (!f.exists()) return
+            val lines = f.readLines().filter { it.isNotBlank() }
+            if (lines.isEmpty()) return
+            scannedEpcs.clear()
+            scannedEpcs.addAll(lines)
+            seenEpcs.clear()
+            seenEpcs.addAll(lines)
+            statusMessage = "Өмнөх session сэргээв: ${lines.size} EPC. Үргэлжлүүлэх эсвэл Цэвэрлэх."
+            Log.i(TAG, "restoreSession: ${lines.size} EPCs")
+        } catch (e: Throwable) {
+            Log.e(TAG, "restoreSession failed", e)
+        }
+    }
+
     private fun loadSettings() {
         val p = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         outputPower    = p.getInt("power", 30)
@@ -517,25 +557,35 @@ class MainActivity : ComponentActivity() {
 
     /** Try common method names on the Chainway UHFTAGInfo to extract RSSI as an Int (dBm). */
     private fun extractRssi(tagInfo: Any): Int? {
+        // Fast path: reuse the method that worked last time (resolved once, then cached).
+        getRssiMethod?.let { m ->
+            return parseRssi(try { m.invoke(tagInfo) } catch (_: Throwable) { null })
+        }
         val candidates = listOf("getRssi", "getRSSI", "getRssiValue", "getRssiDbm")
         for (name in candidates) {
             try {
-                val result = tagInfo.javaClass.getMethod(name).invoke(tagInfo)
-                val parsed: Int? = when (result) {
-                    is Int -> result
-                    is Float -> result.toInt()
-                    is Double -> result.toInt()
-                    is String -> {
-                        val cleaned = result.trim().removeSuffix("dBm").trim()
-                        cleaned.toDoubleOrNull()?.toInt()
-                            ?: cleaned.split(".").firstOrNull()?.toIntOrNull()
-                    }
-                    else -> null
+                val method = tagInfo.javaClass.getMethod(name)
+                val parsed = parseRssi(method.invoke(tagInfo))
+                if (parsed != null) {
+                    getRssiMethod = method   // remember the winner for next time
+                    return parsed
                 }
-                if (parsed != null) return parsed
             } catch (_: Throwable) { /* try next */ }
         }
         return null
+    }
+
+    /** Coerce a reflected RSSI value (Int/Float/Double/String like "-52dBm") to Int dBm. */
+    private fun parseRssi(result: Any?): Int? = when (result) {
+        is Int -> result
+        is Float -> result.toInt()
+        is Double -> result.toInt()
+        is String -> {
+            val cleaned = result.trim().removeSuffix("dBm").trim()
+            cleaned.toDoubleOrNull()?.toInt()
+                ?: cleaned.split(".").firstOrNull()?.toIntOrNull()
+        }
+        else -> null
     }
 
     /** Linear RSSI to 0..100 percent. Tunable range: -80 dBm (far) → -30 dBm (very close). */
@@ -689,9 +739,16 @@ class MainActivity : ComponentActivity() {
             Log.i(TAG, "stopInventory -> $ok")
             isScanning = false
             statusMessage = "Зогссон. ${scannedEpcs.size} EPC уншсан."
+            saveSession()   // persist what we just read
         } catch (e: Throwable) {
             Log.e(TAG, "stopScan failed", e)
         }
+    }
+
+    override fun onPause() {
+        // Covers home button, app-switch, and most process-kill paths — persist before we lose focus.
+        saveSession()
+        super.onPause()
     }
 
     /**
@@ -752,5 +809,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "EpcApp"
         private const val PREFS_NAME = "epc_app_prefs"
+        private const val SESSION_FILE = "epc_session.txt"
     }
 }

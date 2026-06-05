@@ -19,8 +19,7 @@
                  │
                  ▼
          ┌──────────────┐
-         │ EpcDecoder   │  (memoized)
-         │ FilterBuilder│
+         │ EpcDecoder   │  (LRU memoized)
          │ MatchEngine  │
          └──────────────┘
 ```
@@ -33,16 +32,14 @@
 
 | Файл | Үүрэг |
 |---|---|
-| **EpcDecoder.kt** | EPC hex → GTIN-13 barcode хөрвүүлэгч. SGTIN-96 Partition 0-6 дэмжих. ConcurrentHashMap-аар memoize. Raw HEX fallback. |
-| **FilterBuilder.kt** | Packing list-ээс Gen2 Select filter mask үүсгэх. CP/IR-ийн битийн уртыг тооцох. |
-| **MatchEngine.kt** | EPC stream-ийг packing list-тэй тулгах. Per-SKU read count + orphan tracking. |
+| **EpcDecoder.kt** | EPC hex → GTIN-13 barcode хөрвүүлэгч. SGTIN-96 Partition 0-6 дэмжих. Bounded LRU-аар memoize (20k entry). Raw HEX fallback. |
+| **MatchEngine.kt** | Stateless canonical matcher. `groupByBarcode()` + `summarize()`. UI (MatchView, SkuDetailOverlay) болон CSV export бүгд үүгээр тулгана — нэг л хэрэгжүүлэлт. |
 
 ### `com.epcbc.scan`
 
 | Файл | Үүрэг |
 |---|---|
 | **EpcStream.kt** | LinkedBlockingQueue буфер. SDK callback-аас push, UI thread-аас drain. |
-| **RfidProbe.kt** | Compile-time SDK class probe (build-д SDK linking шалгах). |
 
 ### `com.epcbc.data`
 
@@ -54,7 +51,7 @@
 
 | Файл | Үүрэг |
 |---|---|
-| **MainActivity.kt** | Compose UI host. Reflection-based Chainway SDK calls. Hardware trigger dispatching. Settings persistence. |
+| **MainActivity.kt** | Compose UI host. Reflection-based Chainway SDK calls (method handle-ууд кэшлэгдсэн). Hardware trigger dispatching. Settings + scan-session persistence (restart дээр EPC сэргээнэ). |
 
 ---
 
@@ -363,18 +360,19 @@ EpcBarcodeApp/
 │   │   │   │   ├── app/MainActivity.kt
 │   │   │   │   ├── core/
 │   │   │   │   │   ├── EpcDecoder.kt
-│   │   │   │   │   ├── FilterBuilder.kt
 │   │   │   │   │   └── MatchEngine.kt
 │   │   │   │   ├── data/PackingListReader.kt
 │   │   │   │   └── scan/
-│   │   │   │       ├── EpcStream.kt
-│   │   │   │       └── RfidProbe.kt
+│   │   │   │       └── EpcStream.kt
 │   │   │   ├── res/
 │   │   │   │   ├── drawable/ic_launcher_*.xml
 │   │   │   │   ├── mipmap-*/ic_launcher*.png/xml
 │   │   │   │   └── values/
 │   │   │   └── AndroidManifest.xml
-│   │   └── test/java/com/epcbc/core/EpcDecoderTest.kt
+│   │   ├── test/java/com/epcbc/core/
+│   │   │   ├── EpcDecoderTest.kt
+│   │   │   └── MatchEngineTest.kt
+│   │   └── androidTest/java/com/epcbc/data/PackingListReaderTest.kt
 │   ├── build.gradle.kts
 │   └── proguard-rules.pro
 ├── build.gradle.kts

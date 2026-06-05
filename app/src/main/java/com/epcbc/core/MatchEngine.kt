@@ -1,73 +1,100 @@
 package com.epcbc.core
 
+import com.epcbc.data.PackingListReader.PackingItem
+
 /**
- * Matches incoming EPC streams against an imported packing list and tracks per-SKU read counts.
+ * Canonical EPC ↔ packing-list matcher.
+ *
+ * Pure and stateless: every call recomputes from the current (packingList, scannedEpcs)
+ * snapshot. That fits Compose's recomposition model and — more importantly — gives the
+ * scan screen, the SKU-detail overlay, and the CSV export ONE shared implementation of
+ * "decode each EPC and group by barcode" instead of three copies that can drift apart.
+ *
+ * Decoding goes through [EpcDecoder], which is itself cached, so repeated calls over the
+ * same EPC set are cheap.
  */
-class MatchEngine(
-    initialPackingList: List<PackingItem>,
-    private val allowRawHexFallback: Boolean = true,
-) {
+object MatchEngine {
 
-    data class PackingItem(
-        val sku: String?,
-        val barcode: String,
-        val itemName: String? = null,
-        val qty: Int
+    /** Read state for a single packing-list row. */
+    data class SkuResult(val item: PackingItem, val read: Int) {
+        val qty: Int get() = item.qty
+        val isComplete: Boolean get() = read == qty
+        val isOver: Boolean get() = read > qty
+        val isMissing: Boolean get() = read < qty
+    }
+
+    /** Full match snapshot: per-row results plus piece-count totals. */
+    data class Summary(
+        val rows: List<SkuResult>,
+        val matchedPieces: Int,
+        val missingPieces: Int,
+        val overPieces: Int,
+        val totalExpected: Int,
+        val orphanCount: Int,
+        val scannedByBarcode: Map<String, Set<String>>,
     )
 
-    data class SkuState(
-        val item: PackingItem,
-        val seenEpcs: MutableSet<String> = LinkedHashSet(),
-    ) {
-        val readCount: Int get() = seenEpcs.size
-        val isComplete: Boolean get() = readCount >= item.qty
-        val isOver: Boolean get() = readCount > item.qty
-    }
-
-    private val _orphanEpcs = LinkedHashSet<String>()
-    val orphanEpcs: Set<String> get() = _orphanEpcs
-
-    private val byBarcode: MutableMap<String, SkuState> = LinkedHashMap()
-
-    init {
-        for (item in initialPackingList) {
-            byBarcode[item.barcode] = SkuState(item)
+    /**
+     * Decode each EPC and group the raw EPC strings by their converted barcode.
+     * EPCs that fail to decode to a barcode are dropped.
+     */
+    fun groupByBarcode(
+        epcs: List<String>,
+        allowRawHexFallback: Boolean = true,
+    ): Map<String, Set<String>> {
+        val map = LinkedHashMap<String, MutableSet<String>>()
+        for (epc in epcs) {
+            val barcode = try {
+                EpcDecoder.decode(epc, allowRawHexFallback).barcode
+            } catch (_: Throwable) {
+                null
+            } ?: continue
+            map.getOrPut(barcode) { LinkedHashSet() }.add(epc)
         }
+        return map
     }
 
-    fun feedEpc(epcHex: String): Boolean {
-        val result = EpcDecoder.decode(epcHex, allowRawHexFallback)
-        val key = result.barcode ?: return false
-        val state = byBarcode[key]
-        if (state == null) {
-            _orphanEpcs.add(epcHex.uppercase())
-            return false
+    /**
+     * Compute the full match summary for a [packingList] against a set of [scannedEpcs].
+     * Totals are counted by PIECE (not by SKU): a SKU expecting 5 that read 3 contributes
+     * 3 matched + 2 missing.
+     */
+    fun summarize(
+        packingList: List<PackingItem>,
+        scannedEpcs: List<String>,
+        allowRawHexFallback: Boolean = true,
+    ): Summary {
+        val scannedByBarcode = groupByBarcode(scannedEpcs, allowRawHexFallback)
+
+        val rows = packingList.map { item ->
+            SkuResult(item, scannedByBarcode[item.barcode]?.size ?: 0)
         }
-        state.seenEpcs.add(epcHex.uppercase())
-        return true
-    }
 
-    fun snapshot(): List<SkuState> = byBarcode.values.toList()
-
-    fun statsFor(barcode: String): SkuState? = byBarcode[barcode]
-
-    fun totals(): Totals {
-        var expected = 0; var read = 0; var complete = 0; var over = 0
-        for (s in byBarcode.values) {
-            expected += s.item.qty
-            read += s.readCount
-            if (s.isComplete) complete++
-            if (s.isOver) over++
+        var matched = 0
+        var missing = 0
+        var over = 0
+        var expected = 0
+        for (r in rows) {
+            expected += r.qty
+            matched += r.read.coerceAtMost(r.qty)
+            missing += (r.qty - r.read).coerceAtLeast(0)
+            over += (r.read - r.qty).coerceAtLeast(0)
         }
-        return Totals(expected, read, complete, over, byBarcode.size, _orphanEpcs.size)
-    }
 
-    data class Totals(
-        val expected: Int,
-        val read: Int,
-        val completedSkus: Int,
-        val overReadSkus: Int,
-        val totalSkus: Int,
-        val orphanEpcs: Int
-    )
+        // Orphans = scanned EPCs whose decoded barcode is not in the packing list.
+        val listedBarcodes = packingList.mapTo(HashSet()) { it.barcode }
+        val orphanCount = scannedByBarcode.entries
+            .filter { it.key !in listedBarcodes }
+            .sumOf { it.value.size }
+
+        return Summary(
+            rows = rows,
+            matchedPieces = matched,
+            missingPieces = missing,
+            overPieces = over,
+            totalExpected = expected,
+            orphanCount = orphanCount,
+            scannedByBarcode = scannedByBarcode,
+        )
+    }
 }
