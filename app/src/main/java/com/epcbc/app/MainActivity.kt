@@ -10,15 +10,24 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.epcbc.app.ui.FinderOverlay
+import com.epcbc.app.ui.LoginScreen
+import com.epcbc.app.ui.ReceivingOverlay
 import com.epcbc.app.ui.ScanScreen
+import com.epcbc.app.ui.ServerBar
 import com.epcbc.app.ui.SettingsDialog
 import com.epcbc.app.ui.SkuDetailOverlay
 import com.epcbc.app.ui.theme.EpcBarcodeappTheme
+import com.epcbc.net.Supa
+import io.github.jan.supabase.auth.status.SessionStatus
 
 /**
  * Thin UI host. All scan state and SDK/business logic lives in [ScanViewModel], which survives
@@ -29,6 +38,7 @@ import com.epcbc.app.ui.theme.EpcBarcodeappTheme
 class MainActivity : ComponentActivity() {
 
     private val viewModel: ScanViewModel by viewModels()
+    private val syncViewModel: SyncViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,9 +55,48 @@ class MainActivity : ComponentActivity() {
                     contract = ActivityResultContracts.CreateDocument("text/csv")
                 ) { uri: Uri? -> if (uri != null) viewModel.exportResultsToCsv(uri) }
 
+                // Supabase session: нэвтрээгүй (мөн офлайн-г сонгоогүй) бол Login дэлгэц.
+                val sessionStatus by syncViewModel.sessionStatus.collectAsState()
+                val loggedIn = Supa.isConfigured && sessionStatus is SessionStatus.Authenticated
+                val needLogin = Supa.isConfigured &&
+                    !loggedIn &&
+                    sessionStatus !is SessionStatus.Initializing &&
+                    !syncViewModel.skipLogin
+
+                if (needLogin) {
+                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                        Column(Modifier.padding(innerPadding)) {
+                            LoginScreen(
+                                busy = syncViewModel.authBusy,
+                                error = syncViewModel.authError,
+                                notConfigured = !Supa.isConfigured,
+                                onLogin = { e, p -> syncViewModel.login(e, p) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            androidx.compose.material3.TextButton(
+                                onClick = { syncViewModel.skipLogin = true },
+                                modifier = Modifier.padding(16.dp)
+                            ) { androidx.compose.material3.Text("Офлайн горимоор үргэлжлүүлэх →") }
+                        }
+                    }
+                    return@EpcBarcodeappTheme
+                }
+
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    Column(Modifier.padding(innerPadding)) {
+                    ServerBar(
+                        loggedIn = loggedIn,
+                        email = syncViewModel.userEmail,
+                        activeJobNumber = syncViewModel.activeReceipt?.jobNumber,
+                        onOpenReceiving = {
+                            syncViewModel.showReceiving = true
+                            if (syncViewModel.receipts.isEmpty()) syncViewModel.refreshReceipts()
+                        },
+                        onLogin = { syncViewModel.skipLogin = false },
+                        onLogout = { syncViewModel.logout() },
+                    )
                     ScanScreen(
-                        modifier = Modifier.padding(innerPadding),
+                        modifier = Modifier,
                         scannedEpcs = viewModel.scannedEpcs,
                         readerReady = viewModel.readerReady,
                         isScanning = viewModel.isScanning,
@@ -79,6 +128,30 @@ class MainActivity : ComponentActivity() {
                         },
                         onOpenFinder = { viewModel.showFinder = true },
                         onSelectItem = { viewModel.selectedItem = it }
+                    )
+                    }
+                }
+
+                // Хүлээн авалт — in-tree overlay (Dialog биш: PTT товч Activity-д хүрнэ).
+                if (syncViewModel.showReceiving && loggedIn) {
+                    ReceivingOverlay(
+                        receipts = syncViewModel.receipts,
+                        receiptsLoading = syncViewModel.receiptsLoading,
+                        activeReceipt = syncViewModel.activeReceipt,
+                        progress = syncViewModel.progress,
+                        progressLoading = syncViewModel.progressLoading,
+                        submitBusy = syncViewModel.submitBusy,
+                        scannedCount = viewModel.scannedEpcs.size,
+                        message = syncViewModel.syncMessage,
+                        error = syncViewModel.syncError,
+                        onRefreshReceipts = { syncViewModel.refreshReceipts() },
+                        onSelect = { syncViewModel.selectReceipt(it) },
+                        onRefreshProgress = { syncViewModel.refreshProgress() },
+                        onSubmit = { syncViewModel.submitScans(viewModel.scannedEpcs.toList()) },
+                        onDismiss = {
+                            syncViewModel.showReceiving = false
+                            syncViewModel.clearSyncMessages()
+                        },
                     )
                 }
 

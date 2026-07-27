@@ -1,6 +1,16 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+}
+
+// Supabase холболтын тохиргоо — local.properties-оос (commit хийгдэхгүй).
+// supabase.url / supabase.anonKey түлхүүрүүд; байхгүй бол хоосон (build унахгүй).
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -19,6 +29,9 @@ android {
         versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "SUPABASE_URL", "\"${localProps.getProperty("supabase.url", "")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProps.getProperty("supabase.anonKey", "")}\"")
     }
 
     buildTypes {
@@ -48,6 +61,14 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+    // Supabase (Auth + Postgrest) — вебтэй ижил backend, RLS үйлчилнэ
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.postgrest)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.kotlinx.coroutines.android)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

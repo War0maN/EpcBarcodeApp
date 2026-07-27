@@ -8,6 +8,12 @@ lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.8.0"
 kotlin = "2.2.10"
 composeBom = "2026.02.01"
+# 3.5.0 = Kotlin 2.3-аар build хийгдсэн сүүлийн цуврал (төслийн Kotlin 2.2.10 уншиж чадна;
+# 3.6+ нь Kotlin 2.4 metadata-тай тул таарахгүй). Ktor нь supabase-kt 3.5.0-ийн хэрэглэдэг хувилбар.
+supabase = "3.5.0"
+ktor = "3.4.2"
+coroutines = "1.10.2"
+lifecycleViewmodelCompose = "2.6.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -24,8 +30,15 @@ androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "u
 androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
+supabase-bom = { group = "io.github.jan-tennert.supabase", name = "bom", version.ref = "supabase" }
+supabase-auth = { group = "io.github.jan-tennert.supabase", name = "auth-kt" }
+supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt" }
+ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 
