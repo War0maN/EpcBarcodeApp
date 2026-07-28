@@ -66,7 +66,17 @@ object MatchEngine {
     ): Summary {
         val scannedByBarcode = groupByBarcode(scannedEpcs, allowRawHexFallback)
 
-        val rows = packingList.map { item ->
+        // Нэг баркод хэд хэдэн мөрөнд (өөр өөр хайрцагт) ирж болно. Уншилт
+        // баркодоор бүлэглэгддэг тул мөр бүр нийт уншилтыг бүхэлд нь өөртөө
+        // тооцоод давхардуулдаг байсан — barcode-оор нэгтгэж qty-г нийлүүлнэ.
+        val merged = packingList
+            .groupBy { it.barcode }
+            .map { (_, items) ->
+                if (items.size == 1) items[0]
+                else items[0].copy(qty = items.sumOf { it.qty })
+            }
+
+        val rows = merged.map { item ->
             SkuResult(item, scannedByBarcode[item.barcode]?.size ?: 0)
         }
 
