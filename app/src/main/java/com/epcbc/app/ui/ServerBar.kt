@@ -1,11 +1,11 @@
 package com.epcbc.app.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,34 +29,41 @@ fun ServerBar(
     onLogin: () -> Unit,
     onLogout: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    // Surface — Modifier.background() БИШ: background() нь зөвхөн будна,
+    // LocalContentColor-ыг шинэчилдэггүй тул өнгө нь ил заагаагүй Text
+    // үлдэгдэл ХАР өнгөөр гарч, dark theme дээр уншигдахгүй болдог.
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        if (loggedIn) {
-            Text(
-                email ?: "",
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            activeJobNumber?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (loggedIn) {
+                Text(
+                    email ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                activeJobNumber?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                }
+                TextButton(onClick = onOpenReceiving) { Text("Хүлээн авалт") }
+                TextButton(onClick = onLogout) { Text("Гарах") }
+            } else {
+                Text(
+                    "Офлайн горим",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onLogin) { Text("Нэвтрэх") }
             }
-            TextButton(onClick = onOpenReceiving) { Text("Хүлээн авалт") }
-            TextButton(onClick = onLogout) { Text("Гарах") }
-        } else {
-            Text(
-                "Офлайн горим",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onLogin) { Text("Нэвтрэх") }
         }
     }
 }

@@ -1,9 +1,7 @@
 package com.epcbc.app.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +17,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.epcbc.net.ReceivingApi
 
 /**
- * Хүлээн авалтын overlay — Dialog БИШ, in-tree Box (C5-ийн PTT товч
+ * Хүлээн авалтын overlay — Dialog БИШ, in-tree Surface (C5-ийн PTT товч
  * Activity-д хүрсэн хэвээр байхын тулд — SkuDetailOverlay-тай ижил хэв маяг).
  * Ажил сонгоогүй үед: нээлттэй ажлын жагсаалт. Сонгосон үед: явц + илгээх.
  */
@@ -50,13 +49,20 @@ fun ReceivingOverlay(
     onSubmit: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(12.dp)
+    // Surface — Modifier.background() БИШ: background() нь зөвхөн будна,
+    // LocalContentColor-ыг шинэчилдэггүй тул өнгө нь ил зааагүй бүх Text
+    // үлдэгдэл ХАР өнгөөр гарч, dark theme дээр огт уншигдахгүй болдог.
+    // Surface нь дэвсгэрт тохирсон контентын өнгийг (onBackground) өгнө.
+    // Dialog биш, in-tree хэвээр — C5-ийн trigger товч Activity-д хүрнэ.
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
     ) {
-        Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(12.dp)
+        ) {
             // Толгой
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
