@@ -43,6 +43,8 @@ fun ScanScreen(
     packingList: List<PackingListReader.PackingItem>,
     packingListName: String?,
     packingListStatus: String?,
+    /** Серверийн идэвхтэй хүлээн авалтын ажлын дугаар (RCV-0006 г.м.), null = сонгоогүй. */
+    serverJobNumber: String? = null,
     outputPower: Int,
     continuousMode: Boolean,
     prefixLength: Int,
@@ -118,11 +120,24 @@ fun ScanScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                // Серверийн ажил идэвхтэй үед "Packing list оруулаагүй" гэж
+                // харуулах нь төөрөгдүүлдэг (файл огт хэрэггүй) — ажлаа заана.
                 Text(
-                    text = if (packingListSize > 0) "Packing list: $packingListSize мөр" else "Packing list оруулаагүй",
+                    text = when {
+                        packingListSize > 0 -> "Packing list: $packingListSize мөр"
+                        serverJobNumber != null -> "Серверийн ажил: $serverJobNumber"
+                        else -> "Packing list оруулаагүй"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold
                 )
+                if (packingListSize == 0 && serverJobNumber != null) {
+                    Text(
+                        text = "Скан хийгээд дээд мөрний Хүлээн авалт → Илгээх (файл шаардлагагүй)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 packingListName?.let {
                     Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

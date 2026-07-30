@@ -125,8 +125,11 @@ class SyncViewModel : ViewModel() {
     /**
      * Уншсан EPC-үүдийг идэвхтэй ажил руу илгээнэ (500-аар багц, idempotent).
      * Дууссаны дараа явцыг дахин татаж, ангиллын тоог Монголоор харуулна.
+     * [onSuccess] зөвхөн бүх багц амжилттай хүрсэн үед дуудагдана — дуудагч
+     * тал илгээх буфераа цэвэрлэхэд ашиглана (алдаанд буфер хэвээр үлдэж,
+     * дахин илгээж болно).
      */
-    fun submitScans(hexes: List<String>) {
+    fun submitScans(hexes: List<String>, onSuccess: () -> Unit = {}) {
         val r = activeReceipt ?: return
         if (hexes.isEmpty()) {
             syncMessage = "Илгээх скан алга."
@@ -139,6 +142,7 @@ class SyncViewModel : ViewModel() {
             try {
                 val counts = ReceivingApi.submitScans(r.id, hexes)
                 syncMessage = formatCounts(counts)
+                onSuccess()
                 progress = ReceivingApi.fetchProgress(r.id)
             } catch (e: Exception) {
                 Log.w(TAG, "submitScans failed", e)

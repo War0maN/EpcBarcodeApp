@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
                         packingList = viewModel.packingList,
                         packingListName = viewModel.packingListName,
                         packingListStatus = viewModel.packingListStatus,
+                        serverJobNumber = syncViewModel.activeReceipt?.jobNumber,
                         onInitReader = { viewModel.initReader() },
                         onToggle = { viewModel.toggleScan() },
                         onClear = { viewModel.clearScans() },
@@ -147,7 +148,13 @@ class MainActivity : ComponentActivity() {
                         onRefreshReceipts = { syncViewModel.refreshReceipts() },
                         onSelect = { syncViewModel.selectReceipt(it) },
                         onRefreshProgress = { syncViewModel.refreshProgress() },
-                        onSubmit = { syncViewModel.submitScans(viewModel.scannedEpcs.toList()) },
+                        onSubmit = {
+                            // Амжилттай илгээгдмэгц илгээх буфер 0 болно (fix: тоолуур
+                            // хэвээр үлдэж "дахин илгээх үү?" гэсэн төөрөгдөл үүсгэдэг байсан).
+                            syncViewModel.submitScans(viewModel.scannedEpcs.toList()) {
+                                viewModel.clearAfterSubmit()
+                            }
+                        },
                         onDismiss = {
                             syncViewModel.showReceiving = false
                             syncViewModel.clearSyncMessages()
