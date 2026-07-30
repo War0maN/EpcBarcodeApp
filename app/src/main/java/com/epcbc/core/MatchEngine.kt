@@ -15,6 +15,20 @@ import com.epcbc.data.PackingListReader.PackingItem
  */
 object MatchEngine {
 
+    /**
+     * Тулгалтын түлхүүр — серверийн хүлээн авалттай ИЖИЛ нормчлол: GS1 баркодыг
+     * (8/12/13/14 орон) зүүн талаас 0-оор 14 орон болгож гүйцээнэ. Ингэснээр
+     * packing list-ийн 12 оронтой UPC ↔ decoder-ийн 13/14 оронтой гаралт нэг
+     * түлхүүрт буудаг (өмнө нь "888392280015" ≠ "0888392280015" болж дутуу
+     * тоологддог байсан). GS1 биш утга (raw hex fallback г.м.) хэвээрээ.
+     */
+    fun key(barcode: String): String {
+        val t = barcode.trim()
+        return if (t.length in KEY_LENGTHS && t.all { it.isDigit() }) t.padStart(14, '0') else t
+    }
+
+    private val KEY_LENGTHS = setOf(8, 12, 13, 14)
+
     /** Read state for a single packing-list row. */
     data class SkuResult(val item: PackingItem, val read: Int) {
         val qty: Int get() = item.qty
@@ -37,6 +51,7 @@ object MatchEngine {
     /**
      * Decode each EPC and group the raw EPC strings by their converted barcode.
      * EPCs that fail to decode to a barcode are dropped.
+     * Түлхүүр нь [key]-ээр нормчлогдсон — хайхдаа мөн key(барка)-аар хай.
      */
     fun groupByBarcode(
         epcs: List<String>,
@@ -49,7 +64,7 @@ object MatchEngine {
             } catch (_: Throwable) {
                 null
             } ?: continue
-            map.getOrPut(barcode) { LinkedHashSet() }.add(epc)
+            map.getOrPut(key(barcode)) { LinkedHashSet() }.add(epc)
         }
         return map
     }
@@ -68,16 +83,17 @@ object MatchEngine {
 
         // Нэг баркод хэд хэдэн мөрөнд (өөр өөр хайрцагт) ирж болно. Уншилт
         // баркодоор бүлэглэгддэг тул мөр бүр нийт уншилтыг бүхэлд нь өөртөө
-        // тооцоод давхардуулдаг байсан — barcode-оор нэгтгэж qty-г нийлүүлнэ.
+        // тооцоод давхардуулдаг байсан — нормчилсон түлхүүрээр нэгтгэж qty-г
+        // нийлүүлнэ ("888…" ба "0888…" гэж бичигдсэн ижил бараа ч нийлнэ).
         val merged = packingList
-            .groupBy { it.barcode }
+            .groupBy { key(it.barcode) }
             .map { (_, items) ->
                 if (items.size == 1) items[0]
                 else items[0].copy(qty = items.sumOf { it.qty })
             }
 
         val rows = merged.map { item ->
-            SkuResult(item, scannedByBarcode[item.barcode]?.size ?: 0)
+            SkuResult(item, scannedByBarcode[key(item.barcode)]?.size ?: 0)
         }
 
         var matched = 0
@@ -92,7 +108,7 @@ object MatchEngine {
         }
 
         // Orphans = scanned EPCs whose decoded barcode is not in the packing list.
-        val listedBarcodes = packingList.mapTo(HashSet()) { it.barcode }
+        val listedBarcodes = packingList.mapTo(HashSet()) { key(it.barcode) }
         val orphanCount = scannedByBarcode.entries
             .filter { it.key !in listedBarcodes }
             .sumOf { it.value.size }

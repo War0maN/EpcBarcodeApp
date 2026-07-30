@@ -67,7 +67,7 @@ fun SkuDetailOverlay(
 ) {
     // Live-derive EPCs for this SKU from the master scanned list (shared matcher).
     val epcs: List<String> = remember(allScannedEpcs.toList(), item.barcode) {
-        MatchEngine.groupByBarcode(allScannedEpcs)[item.barcode]?.toList() ?: emptyList()
+        MatchEngine.groupByBarcode(allScannedEpcs)[MatchEngine.key(item.barcode)]?.toList() ?: emptyList()
     }
 
     // Auto-derive a prefix from the first matched EPC.

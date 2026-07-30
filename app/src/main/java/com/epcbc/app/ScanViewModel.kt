@@ -146,8 +146,9 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         thread(start = true, name = "ExportCsv") {
             try {
                 // Group scanned EPCs by their converted barcode (shared with the live UI matcher).
+                // Түлхүүрүүд MatchEngine.key-ээр нормчлогдсон тул lookup талдаа мөн key().
                 val readByBarcode = MatchEngine.groupByBarcode(scannedEpcs.toList())
-                val packingByBarcode = packingList.associateBy { it.barcode }
+                val packingByBarcode = packingList.associateBy { MatchEngine.key(it.barcode) }
 
                 // Split scanned EPCs into "matched" (in packing list) and "orphan" (not in list)
                 data class MatchedRow(val epc: String, val barcode: String, val item: PackingListReader.PackingItem)
@@ -176,7 +177,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                 var totalRead = 0
                 var totalOver = 0
                 for (item in packingList.toList()) {
-                    val read = readByBarcode[item.barcode]?.size ?: 0
+                    val read = readByBarcode[MatchEngine.key(item.barcode)]?.size ?: 0
                     totalExpected += item.qty
                     totalRead += read.coerceAtMost(item.qty)
                     totalOver += (read - item.qty).coerceAtLeast(0)
@@ -192,7 +193,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                     writer.write("=== ХҮСНЭГТ 1: SKU тус бүрийн дүгнэлт ===\n")
                     writer.write("SKU,Barcode,Item Name,Expected,Read,Status\n")
                     for (item in packingList.toList()) {
-                        val read = readByBarcode[item.barcode]?.size ?: 0
+                        val read = readByBarcode[MatchEngine.key(item.barcode)]?.size ?: 0
                         val status = when {
                             read == 0 -> "Уншигдаагүй"
                             read == item.qty -> "Бүрэн"

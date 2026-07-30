@@ -22,12 +22,13 @@ class MatchEngineTest {
 
     @Test fun groupByBarcode_groups_same_product_together() {
         val grouped = MatchEngine.groupByBarcode(listOf(epc1, epc2, epc3))
-        assertEquals(setOf(epc1, epc2, epc3), grouped[barcode])
+        // Түлхүүр MatchEngine.key-ээр нормчлогдсон (GTIN-14) — сервертэй ижил.
+        assertEquals(setOf(epc1, epc2, epc3), grouped[MatchEngine.key(barcode)])
     }
 
     @Test fun groupByBarcode_dedupes_identical_epcs() {
         val grouped = MatchEngine.groupByBarcode(listOf(epc1, epc1, epc2))
-        assertEquals(2, grouped[barcode]?.size)
+        assertEquals(2, grouped[MatchEngine.key(barcode)]?.size)
     }
 
     @Test fun summarize_complete_sku() {

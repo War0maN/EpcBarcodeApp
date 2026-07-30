@@ -32,6 +32,8 @@ object EpcDecoder {
     data class DecodeResult(
         val format: String,
         val barcode: String?,
+        /** Бүтэн GTIN-14 (сервертэй ижил хэлбэр); GS1 биш форматад null. */
+        val gtin14: String? = null,
         val rawHex: String,
         val header: Int,
         val filterValue: Int? = null,
@@ -96,13 +98,20 @@ object EpcDecoder {
         val indicator  = itemStr[0].digitToInt()
         val itemRefBody = itemStr.substring(1)
 
-        val gtin12 = "$companyStr$itemRefBody"
-        check(gtin12.length == 12) { "GTIN-12 length wrong: $gtin12 (cp=$companyStr ir=$itemRefBody)" }
-        val gtin13 = gtin12 + gs1CheckDigit(gtin12)
+        // GTIN-14 = indicator + company prefix + item ref body + шалгах орон —
+        // серверийн sgtin96_decode-той ЯГ ижил (хүлээн авалтын тулгалтын үндэс).
+        // Өмнө нь indicator-ыг хаяж 13 оронтой barcode гаргадаг байсан.
+        val data13 = "$indicator$companyStr$itemRefBody"
+        check(data13.length == 13) { "GTIN-14 data length wrong: $data13 (cp=$companyStr ir=$itemRefBody)" }
+        val gtin14 = data13 + gs1CheckDigit(data13)
+        // Дэлгэцэд хэвшсэн хэлбэр: indicator 0 үед GTIN-13 (шалгах орон тэргүүлэх
+        // 0-д үл хамаарах тул substring хүчинтэй), бусад үед бүтэн 14 орон.
+        val barcode = if (indicator == 0) gtin14.substring(1) else gtin14
 
         return DecodeResult(
             format         = "SGTIN-96",
-            barcode        = gtin13,
+            barcode        = barcode,
+            gtin14         = gtin14,
             rawHex         = hex,
             header         = header,
             filterValue    = filter,
@@ -114,11 +123,17 @@ object EpcDecoder {
         )
     }
 
-    fun gs1CheckDigit(twelveDigits: String): Int {
+    /**
+     * GS1 шалгах орон — ДУРЫН урттай өгөгдөлд (баруун талын цифрээс 3,1,3,1…
+     * жинтэй). Өмнөх хувилбар зүүнээс индекслэдэг байсан тул зөвхөн тэгш
+     * урттай (GTIN-13-ийн 12 цифр) өгөгдөлд зөв байсан; GTIN-14-ийн 13 цифрт
+     * жин нь урвуугаар буудаг байв.
+     */
+    fun gs1CheckDigit(digits: String): Int {
         var sum = 0
-        for ((idx, ch) in twelveDigits.withIndex()) {
+        for ((i, ch) in digits.reversed().withIndex()) {
             val d = ch.digitToInt()
-            sum += if (idx % 2 == 0) d else d * 3
+            sum += if (i % 2 == 0) d * 3 else d
         }
         return (10 - (sum % 10)) % 10
     }
