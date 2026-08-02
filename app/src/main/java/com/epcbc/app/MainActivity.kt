@@ -23,6 +23,8 @@ import com.epcbc.app.ui.LoginScreen
 import com.epcbc.app.ui.ReceivingOverlay
 import com.epcbc.app.ui.ScanScreen
 import com.epcbc.app.ui.ServerBar
+import com.epcbc.app.ui.StRow
+import com.epcbc.app.ui.StocktakeOverlay
 import com.epcbc.app.ui.SettingsDialog
 import com.epcbc.app.ui.SkuDetailOverlay
 import com.epcbc.app.ui.theme.EpcBarcodeappTheme
@@ -44,6 +46,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         Log.i(TAG, "MainActivity.onCreate")
+
+        // Шинэ уншилт бүрийг тооллогын амьд тулгагч руу дамжуулна (идэвхтэй
+        // тооллого сонгоогүй үед hook дотроо шууд буцдаг — зардал 0).
+        viewModel.onNewEpcs = { syncViewModel.onStocktakeScans(it) }
 
         setContent {
             EpcBarcodeappTheme {
@@ -91,6 +97,10 @@ class MainActivity : ComponentActivity() {
                         onOpenReceiving = {
                             syncViewModel.showReceiving = true
                             if (syncViewModel.receipts.isEmpty()) syncViewModel.refreshReceipts()
+                        },
+                        onOpenStocktake = {
+                            syncViewModel.showStocktake = true
+                            if (syncViewModel.stocktakes.isEmpty()) syncViewModel.refreshStocktakes()
                         },
                         onLogin = { syncViewModel.skipLogin = false },
                         onLogout = { syncViewModel.logout() },
@@ -157,6 +167,52 @@ class MainActivity : ComponentActivity() {
                         },
                         onDismiss = {
                             syncViewModel.showReceiving = false
+                            syncViewModel.clearSyncMessages()
+                        },
+                    )
+                }
+
+                // Тооллого — in-tree overlay (Dialog биш: PTT товч Activity-д хүрнэ).
+                // Мөр = бараа; found = max(локал амьд, серверийн явц) — нэг
+                // төхөөрөмжид хоёулаа тэнцүү, олон төхөөрөмжид сервер илүү мэднэ.
+                if (syncViewModel.showStocktake && loggedIn) {
+                    val stRows = syncViewModel.stExpectedByProduct.map { (pid, exp) ->
+                        val meta = syncViewModel.stProductMeta[pid]
+                        StRow(
+                            productId = pid,
+                            name = meta?.name ?: meta?.sku ?: meta?.gtin ?: pid.take(8),
+                            sku = meta?.sku,
+                            expected = exp,
+                            found = maxOf(
+                                syncViewModel.stFoundLocal[pid] ?: 0,
+                                syncViewModel.stFoundServer[pid] ?: 0,
+                            ),
+                        )
+                    }.sortedWith(compareBy({ it.found >= it.expected }, { it.name }))
+                    StocktakeOverlay(
+                        stocktakes = syncViewModel.stocktakes,
+                        stocktakesLoading = syncViewModel.stocktakesLoading,
+                        active = syncViewModel.activeStocktake,
+                        expectedLoading = syncViewModel.stExpectedLoading,
+                        rows = stRows,
+                        extraLocal = syncViewModel.stExtraLocal,
+                        pendingCount = viewModel.scannedEpcs.size,
+                        submitBusy = syncViewModel.submitBusy,
+                        progressLoading = syncViewModel.progressLoading,
+                        message = syncViewModel.syncMessage,
+                        error = syncViewModel.syncError,
+                        onRefreshList = { syncViewModel.refreshStocktakes() },
+                        onSelect = { st ->
+                            syncViewModel.selectStocktake(st, viewModel.scannedEpcs.toList())
+                        },
+                        onRefreshProgress = { syncViewModel.refreshStocktakeProgress() },
+                        onSubmit = {
+                            syncViewModel.submitStocktakeScans(viewModel.scannedEpcs.toList()) {
+                                viewModel.clearAfterSubmit()
+                            }
+                        },
+                        onDismiss = {
+                            syncViewModel.showStocktake = false
                             syncViewModel.clearSyncMessages()
                         },
                     )

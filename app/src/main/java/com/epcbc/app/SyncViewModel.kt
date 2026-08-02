@@ -2,11 +2,13 @@ package com.epcbc.app
 
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.epcbc.net.ReceivingApi
+import com.epcbc.net.StocktakeApi
 import com.epcbc.net.Supa
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -78,6 +80,9 @@ class SyncViewModel : ViewModel() {
             activeReceipt = null
             receipts = emptyList()
             progress = emptyList()
+            selectStocktake(null)
+            stocktakes = emptyList()
+            showStocktake = false
             syncMessage = null
             syncError = null
         }
@@ -156,6 +161,155 @@ class SyncViewModel : ViewModel() {
     fun clearSyncMessages() {
         syncMessage = null
         syncError = null
+    }
+
+    // ══════════════ ТООЛЛОГО (Ү6) ══════════════
+    // Хэв маяг хүлээн авалттай ижил, нэг ялгаа: snapshot-ыг эхэнд нь бүтнээр
+    // татаж, тулгалтыг ТӨХӨӨРӨМЖ ДЭЭР амьд хийнэ — компьютергүй ажилтан
+    // явцаа (1/23, дутуу, жагсаалтад байхгүй) сүлжээгүйгээр ч хардаг.
+    // Сервер эцсийн үнэн хэвээр: Илгээхэд idempotent RPC ангилж хадгална.
+
+    var showStocktake by mutableStateOf(false)
+
+    var stocktakes by mutableStateOf<List<StocktakeApi.Stocktake>>(emptyList()); private set
+    var stocktakesLoading by mutableStateOf(false); private set
+    var activeStocktake by mutableStateOf<StocktakeApi.Stocktake?>(null); private set
+    var stExpectedLoading by mutableStateOf(false); private set
+
+    /** hex → productId (snapshot). Compose state БИШ — том, зөвхөн lookup. */
+    private var stExpectedByHex: Map<String, String> = emptyMap()
+    /** productId → snapshot дахь ширхэг. */
+    var stExpectedByProduct: Map<String, Int> = emptyMap(); private set
+    /** productId → нэр/SKU (дэлгэцэд). */
+    var stProductMeta: Map<String, StocktakeApi.ProductInfo> = emptyMap(); private set
+
+    /** Локал тулгалтад аль хэдийн тооцсон hex-үүд (давхардал 1 л удаа). */
+    private val stSeenLocal = HashSet<String>()
+    /** productId → локал олдсон тоо (амьд, мөр бүр эндээс уншина). */
+    val stFoundLocal = mutableStateMapOf<String, Int>()
+    /** Snapshot-д байхгүй уншилтын тоо (илүү/танигдаагүй байж магадгүй). */
+    var stExtraLocal by mutableStateOf(0); private set
+    /** productId → серверийн found (Явц татахад; дэлгэц max(локал, сервер)). */
+    val stFoundServer = mutableStateMapOf<String, Int>()
+
+    fun refreshStocktakes() {
+        stocktakesLoading = true
+        syncError = null
+        viewModelScope.launch {
+            try {
+                stocktakes = StocktakeApi.listOpenStocktakes()
+            } catch (e: Exception) {
+                Log.w(TAG, "listOpenStocktakes failed", e)
+                syncError = "Тооллогын жагсаалт татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                stocktakesLoading = false
+            }
+        }
+    }
+
+    /**
+     * Тооллого сонгоход snapshot-ыг бүтнээр татаж, локал тулгалтыг тэглэнэ.
+     * [seedHexes] — сонгохоос ӨМНӨ буферт байсан уншилтууд (тэдгээрийг ч тооцно).
+     */
+    fun selectStocktake(st: StocktakeApi.Stocktake?, seedHexes: List<String> = emptyList()) {
+        activeStocktake = st
+        stExpectedByHex = emptyMap()
+        stExpectedByProduct = emptyMap()
+        stProductMeta = emptyMap()
+        stSeenLocal.clear()
+        stFoundLocal.clear()
+        stFoundServer.clear()
+        stExtraLocal = 0
+        syncMessage = null
+        if (st == null) return
+        stExpectedLoading = true
+        viewModelScope.launch {
+            try {
+                val items = StocktakeApi.fetchExpectedItems(st.id)
+                stExpectedByHex = items.associate { it.epcHex.trim().uppercase() to it.productId }
+                stExpectedByProduct = items.groupingBy { it.productId }.eachCount()
+                stProductMeta = StocktakeApi.fetchProducts(stExpectedByProduct.keys)
+                onStocktakeScans(seedHexes)
+            } catch (e: Exception) {
+                Log.w(TAG, "fetchExpectedItems failed", e)
+                syncError = "Тооллогын жагсаалт татахад алдаа: ${e.message ?: "холболт"}"
+                activeStocktake = null
+            } finally {
+                stExpectedLoading = false
+            }
+        }
+    }
+
+    /**
+     * Уншигчаас шинэ EPC ирэх бүрд (мөн seed-д) дуудагдана — O(багц) амьд
+     * тулгалт. Багц 100мс тутам жижиг ирдэг тул UI гацахгүй; дэлгэц таг биш
+     * БАРААГААР зурагддаг тул 10k таг ч жагсаалт нь барааны тоогоор л байна.
+     */
+    fun onStocktakeScans(hexes: List<String>) {
+        if (activeStocktake == null || hexes.isEmpty()) return
+        for (raw in hexes) {
+            val hex = raw.trim().uppercase()
+            if (!stSeenLocal.add(hex)) continue
+            val prod = stExpectedByHex[hex]
+            if (prod != null) stFoundLocal[prod] = (stFoundLocal[prod] ?: 0) + 1
+            else stExtraLocal++
+        }
+    }
+
+    fun refreshStocktakeProgress() {
+        val st = activeStocktake ?: return
+        progressLoading = true
+        viewModelScope.launch {
+            try {
+                val rows = StocktakeApi.fetchProgress(st.id)
+                stFoundServer.clear()
+                for (r in rows) stFoundServer[r.productId] = r.found
+            } catch (e: Exception) {
+                Log.w(TAG, "stocktake fetchProgress failed", e)
+                syncError = "Явц татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                progressLoading = false
+            }
+        }
+    }
+
+    /** Буферт хуримтлагдсан уншилтуудыг илгээнэ (500-аар багц, idempotent). */
+    fun submitStocktakeScans(hexes: List<String>, onSuccess: () -> Unit = {}) {
+        val st = activeStocktake ?: return
+        if (hexes.isEmpty()) {
+            syncMessage = "Илгээх скан алга."
+            return
+        }
+        submitBusy = true
+        syncError = null
+        syncMessage = null
+        viewModelScope.launch {
+            try {
+                val counts = StocktakeApi.submitScans(st.id, hexes)
+                syncMessage = formatStocktakeCounts(counts)
+                onSuccess()
+                val rows = StocktakeApi.fetchProgress(st.id)
+                stFoundServer.clear()
+                for (r in rows) stFoundServer[r.productId] = r.found
+            } catch (e: Exception) {
+                Log.w(TAG, "submitStocktakeScans failed", e)
+                syncError = "Илгээхэд алдаа: ${e.message ?: "холболт"} — дахин илгээхэд аюулгүй (давхардахгүй)."
+            } finally {
+                submitBusy = false
+            }
+        }
+    }
+
+    private fun formatStocktakeCounts(counts: Map<String, Int>): String {
+        val labels = mapOf(
+            "found" to "Тоологдсон",
+            "not_expected" to "Илүү",
+            "unknown" to "Бүртгэлгүй",
+            "skipped" to "Алгассан (давхардал)",
+        )
+        val parts = counts.filterValues { it > 0 }
+            .map { (k, v) -> "${labels[k] ?: k}: $v" }
+        return if (parts.isEmpty()) "Шинэ скан алга." else "Илгээлээ — " + parts.joinToString(" · ")
     }
 
     private fun formatCounts(counts: Map<String, Int>): String {

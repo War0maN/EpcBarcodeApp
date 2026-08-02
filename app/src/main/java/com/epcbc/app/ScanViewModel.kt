@@ -50,6 +50,13 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     var prefixLength by mutableStateOf(20); private set
     var soundEnabled by mutableStateOf(true); private set
 
+    /**
+     * Шинэ (давхардаагүй) EPC ирэх бүрд main thread дээр дуудагдах hook —
+     * тооллого зэрэг горимууд амьд тулгалтаа O(багц)-аар хийнэ. MainActivity
+     * онооно; scannedEpcs-ийг бүхэлд нь дахин боловсруулахаас хамаагүй хөнгөн.
+     */
+    var onNewEpcs: ((List<String>) -> Unit)? = null
+
     // ── Pure-UI toggles (set directly by the UI) ─────────────────────────
     var showSettings by mutableStateOf(false)
     var selectedItem by mutableStateOf<PackingListReader.PackingItem?>(null)
@@ -401,7 +408,10 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                         if (soundEnabled) {
                             try { toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, 30) } catch (_: Throwable) {}
                         }
-                        runOnMain { scannedEpcs.addAll(0, newOnes) }
+                        runOnMain {
+                            scannedEpcs.addAll(0, newOnes)
+                            onNewEpcs?.invoke(newOnes)
+                        }
                     }
                     decayFinderIfStale()
                 }

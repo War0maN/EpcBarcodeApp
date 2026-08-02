@@ -26,6 +26,7 @@ fun ServerBar(
     email: String?,
     activeJobNumber: String?,
     onOpenReceiving: () -> Unit,
+    onOpenStocktake: () -> Unit,
     onLogin: () -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -55,6 +56,7 @@ fun ServerBar(
                     Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                 }
                 TextButton(onClick = onOpenReceiving) { Text("Хүлээн авалт") }
+                TextButton(onClick = onOpenStocktake) { Text("Тооллого") }
                 TextButton(onClick = onLogout) { Text("Гарах") }
             } else {
                 Text(
