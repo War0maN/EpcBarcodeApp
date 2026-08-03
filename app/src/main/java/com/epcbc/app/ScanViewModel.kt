@@ -324,6 +324,35 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleScan() { if (isScanning) stopScan() else startScan() }
 
+    /**
+     * Уншигчийг сэргээх: UHF модулийг өөр апп эзэмшээд буцахад хуучин handle
+     * үхмэл болдог. free (хуучин handle-ээ суллах) → init (шинээр авах) →
+     * нэг удаа дахин эхлүүлэх. Давтан сэргээлт үүсэхээс recovering туг +
+     * startScan(allowRecover=false) хоёр давхар хамгаална.
+     */
+    private var recovering = false
+    private fun recoverReaderAndRetry() {
+        if (recovering) return
+        recovering = true
+        statusMessage = "Уншигч алдагдсан — дахин холбож байна…"
+        thread(start = true, name = "ReaderRecover") {
+            try { reader?.javaClass?.getMethod("free")?.invoke(reader) } catch (e: Throwable) {
+                Log.w(TAG, "recover free failed (үргэлжилнэ)", e)
+            }
+            runOnMain {
+                reader = null
+                readerReady = false
+                initReader() // init + callback + power + drain timer бүгд дахин
+                if (readerReady) {
+                    startScan(allowRecover = false)
+                } else {
+                    statusMessage = "Уншигч сэргэсэнгүй — UHF ашигладаг өөр аппыг хааж, УНШИГЧ ЭХЛҮҮЛЭХ дар."
+                }
+                recovering = false
+            }
+        }
+    }
+
     /** Hardware trigger (C5 PTT) pressed. Mirrors the old onKeyDown semantics. */
     fun onTriggerDown() {
         if (!readerReady) return
@@ -334,7 +363,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun startScan() {
+    private fun startScan(allowRecover: Boolean = true) {
         if (!readerReady || reader == null) {
             statusMessage = "Эхлээд УНШИГЧ ЭХЛҮҮЛЭХ дар"
             return
@@ -345,7 +374,17 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                 val ok = reader!!.javaClass.getMethod("startInventoryTag").invoke(reader) as Boolean
                 Log.i(TAG, "startInventoryTag -> $ok")
                 isScanning = ok
-                statusMessage = if (ok) "Уншиж байна... (${outputPower} dBm)" else "Эхлэх боломжгүй (returned false)"
+                if (ok) {
+                    statusMessage = "Уншиж байна... (${outputPower} dBm)"
+                } else if (allowRecover) {
+                    // UHF модулийг өөр апп (AppCenter-ийн UHF г.м.) түр эзэмшвэл
+                    // бидний handle хүчингүй болж start false буцдаг — автоматаар
+                    // free+init хийгээд дахин эхлүүлнэ (өмнө нь аппыг бүрэн хаах
+                    // шаардлагатай болдог байсан).
+                    recoverReaderAndRetry()
+                } else {
+                    statusMessage = "Эхлэх боломжгүй — UHF ашигладаг өөр аппыг хааж, УНШИГЧ ЭХЛҮҮЛЭХ дар."
+                }
             } else {
                 isScanning = true
                 statusMessage = "Уншиж байна..."
