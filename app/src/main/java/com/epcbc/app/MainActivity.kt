@@ -15,14 +15,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.collectAsState
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.epcbc.app.ui.FinderOverlay
 import com.epcbc.app.ui.LoginScreen
+import com.epcbc.app.ui.HomeScreen
+import com.epcbc.app.ui.HomeTile
 import com.epcbc.app.ui.ReceivingOverlay
 import com.epcbc.app.ui.ScanScreen
-import com.epcbc.app.ui.ServerBar
+import com.epcbc.app.ui.SearchScreen
 import com.epcbc.app.ui.StRow
 import com.epcbc.app.ui.StocktakeOverlay
 import com.epcbc.app.ui.SettingsDialog
@@ -50,6 +58,13 @@ class MainActivity : ComponentActivity() {
         // Шинэ уншилт бүрийг тооллогын амьд тулгагч руу дамжуулна (идэвхтэй
         // тооллого сонгоогүй үед hook дотроо шууд буцдаг — зардал 0).
         viewModel.onNewEpcs = { syncViewModel.onStocktakeScans(it) }
+
+        // Уншигчийг АВТОМАТААР эхлүүлнэ (нүүрэнд товч байхгүй — 2026-08-02
+        // дизайн): эхний frame зурагдсаны дараа, бэлэн биш үед л. Бүтэхгүй
+        // бол нүүрний төлвийн мөр дээр дарж дахин оролдоно.
+        window.decorView.post {
+            if (!viewModel.readerReady) viewModel.initReader()
+        }
 
         setContent {
             EpcBarcodeappTheme {
@@ -88,23 +103,60 @@ class MainActivity : ComponentActivity() {
                     return@EpcBarcodeappTheme
                 }
 
+                // Нүүр grid ↔ дэд дэлгэцүүд (2026-08-02 дизайн). Хүлээн авалт/
+                // Тооллого overlay хэвээр (аль ч дэлгэцийн дээр нээгддэг).
+                var screen by rememberSaveable { mutableStateOf("home") }
+
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(Modifier.padding(innerPadding)) {
-                    ServerBar(
-                        loggedIn = loggedIn,
+                    when (screen) {
+                    "home" -> HomeScreen(
                         email = syncViewModel.userEmail,
-                        activeJobNumber = syncViewModel.activeReceipt?.jobNumber,
-                        onOpenReceiving = {
-                            syncViewModel.showReceiving = true
-                            if (syncViewModel.receipts.isEmpty()) syncViewModel.refreshReceipts()
-                        },
-                        onOpenStocktake = {
-                            syncViewModel.showStocktake = true
-                            if (syncViewModel.stocktakes.isEmpty()) syncViewModel.refreshStocktakes()
-                        },
+                        loggedIn = loggedIn,
+                        readerReady = viewModel.readerReady,
+                        readerStatus = viewModel.statusMessage,
+                        outputPower = viewModel.outputPower,
+                        tiles = listOf(
+                            HomeTile("stocktake", "📋", "Тооллого",
+                                subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
+                            HomeTile("receiving", "📦", "Хүлээн авалт",
+                                subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
+                            HomeTile("search", "🔍", "Хайлт"),
+                            HomeTile("check", "✅", "Шалгалт", subtitle = "файлтай тулгах"),
+                            HomeTile("transfer", "🔄", "Шилжүүлэг", subtitle = "удахгүй", enabled = false),
+                            HomeTile("sale", "🛒", "Борлуулалт", subtitle = "удахгүй", enabled = false),
+                            HomeTile("settings", "⚙️", "Тохиргоо"),
+                        ),
+                        onRetryReader = { viewModel.initReader() },
                         onLogin = { syncViewModel.skipLogin = false },
                         onLogout = { syncViewModel.logout() },
+                        onOpen = { key ->
+                            when (key) {
+                                "stocktake" -> {
+                                    syncViewModel.showStocktake = true
+                                    if (syncViewModel.stocktakes.isEmpty()) syncViewModel.refreshStocktakes()
+                                }
+                                "receiving" -> {
+                                    syncViewModel.showReceiving = true
+                                    if (syncViewModel.receipts.isEmpty()) syncViewModel.refreshReceipts()
+                                }
+                                "search" -> screen = "search"
+                                "check" -> screen = "check"
+                                "settings" -> viewModel.showSettings = true
+                            }
+                        },
                     )
+                    "search" -> SearchScreen(
+                        loggedIn = loggedIn,
+                        onBack = { screen = "home" },
+                        onFind = { prefix ->
+                            viewModel.finderTargetEpc = prefix
+                            viewModel.showFinder = true
+                        },
+                    )
+                    else -> Column {
+                    BackHandler(onBack = { screen = "home" })
+                    TextButton(onClick = { screen = "home" }) { Text("← Нүүр") }
                     ScanScreen(
                         modifier = Modifier,
                         scannedEpcs = viewModel.scannedEpcs,
@@ -140,6 +192,8 @@ class MainActivity : ComponentActivity() {
                         onOpenFinder = { viewModel.showFinder = true },
                         onSelectItem = { viewModel.selectedItem = it }
                     )
+                    }
+                    }
                     }
                 }
 
