@@ -55,18 +55,6 @@ object ProductsApi {
             .decodeList<EpcHexRow>()
             .firstOrNull()?.epcHex?.trim()?.uppercase()
 
-    /**
-     * EPC-ээс БАРААНЫ угтварыг тайрч авна (серийн дугаарын өмнөх хэсэг):
-     * SGTIN-96 (header 30) — сериал 38 бит → эхний 14 hex орон (56 бит);
-     * GID-96  (header 35) — сериал 36 бит → эхний 15 hex орон (60 бит).
-     * Тодорхойгүй форматад болгоомжтой 14 орон.
-     */
-    fun productPrefix(epcHex: String): String {
-        val h = epcHex.trim().uppercase()
-        return when {
-            h.startsWith("30") -> h.take(14)
-            h.startsWith("35") -> h.take(15)
-            else -> h.take(14)
-        }
-    }
+    /** EPC-ээс барааны угтвар — нэг эх сурвалж: [EpcDecoder.productPrefix]. */
+    fun productPrefix(epcHex: String): String = com.epcbc.core.EpcDecoder.productPrefix(epcHex)
 }

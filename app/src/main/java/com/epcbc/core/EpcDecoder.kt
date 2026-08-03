@@ -138,6 +138,22 @@ object EpcDecoder {
         return (10 - (sum % 10)) % 10
     }
 
+    /**
+     * EPC-ээс БАРААГ тодорхойлох угтварыг бүтцээр нь тайрна (серийн өмнөх
+     * хэсэг): SGTIN-96 (header 30) — сериал 38 бит → 14 hex; GID-96 (35) —
+     * сериал 36 бит → 15 hex. Гараар тохируулдаг prefix-урт (хуучин 20)
+     * серийн дээд битүүдийг давхар шүүж, нэг барааны зарим тагийг чимээгүй
+     * алгасдаг байсныг энэ орлоно (2026-08-03).
+     */
+    fun productPrefix(epcHex: String): String {
+        val h = epcHex.trim().uppercase()
+        return when {
+            h.startsWith("30") -> h.take(14)
+            h.startsWith("35") -> h.take(15)
+            else -> h.take(14)
+        }
+    }
+
     private fun hexToBinary(hex: String): String =
         hex.map { c -> c.digitToInt(16).toString(2).padStart(4, '0') }.joinToString("")
 

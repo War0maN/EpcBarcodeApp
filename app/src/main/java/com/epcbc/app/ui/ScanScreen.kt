@@ -47,7 +47,6 @@ fun ScanScreen(
     serverJobNumber: String? = null,
     outputPower: Int,
     continuousMode: Boolean,
-    prefixLength: Int,
     onInitReader: () -> Unit,
     onToggle: () -> Unit,
     onClear: () -> Unit,
@@ -214,7 +213,6 @@ fun ScanScreen(
             MatchView(
                 packingList = packingList,
                 scannedEpcs = scannedEpcs,
-                prefixLength = prefixLength,
                 onSelectItem = onSelectItem,
                 modifier = Modifier.weight(1f).fillMaxWidth()
             )

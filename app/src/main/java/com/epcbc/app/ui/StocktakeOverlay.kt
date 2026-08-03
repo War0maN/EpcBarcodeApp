@@ -69,6 +69,7 @@ fun StocktakeOverlay(
     onSelect: (StocktakeApi.Stocktake?) -> Unit,
     onRefreshProgress: () -> Unit,
     onSubmit: () -> Unit,
+    onFindMissing: (productId: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     // Back товч: тооллого сонгосон бол жагсаалт руу, эс бөгөөс overlay хаана.
@@ -217,7 +218,7 @@ fun StocktakeOverlay(
                             }
                             Text(
                                 "${r.found} / ${r.expected}",
-                                modifier = Modifier.width(96.dp),
+                                modifier = Modifier.width(72.dp),
                                 color = when {
                                     done -> Color(0xFF059669)
                                     r.found > 0 -> Color(0xFFD97706)
@@ -225,6 +226,11 @@ fun StocktakeOverlay(
                                 },
                                 fontWeight = if (done) FontWeight.Bold else FontWeight.Normal,
                             )
+                            // Дутуутай мөрөнд шууд Олох — Geiger нь яг энэ барааны
+                            // ДУТУУ ширхэгүүдийг л сонсоно (2026-08-03 тохирсон).
+                            if (!done) {
+                                TextButton(onClick = { onFindMissing(r.productId) }) { Text("🎯") }
+                            }
                         }
                         HorizontalDivider()
                     }

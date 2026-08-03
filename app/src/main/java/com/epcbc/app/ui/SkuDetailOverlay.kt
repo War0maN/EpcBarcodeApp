@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.epcbc.core.EpcDecoder
 import com.epcbc.core.MatchEngine
 import com.epcbc.data.PackingListReader
 import kotlinx.coroutines.delay
@@ -59,7 +60,6 @@ import kotlinx.coroutines.delay
 fun SkuDetailOverlay(
     item: PackingListReader.PackingItem,
     allScannedEpcs: List<String>,
-    prefixLength: Int,
     isScanning: Boolean,
     onToggleScan: () -> Unit,
     onFilterChange: (String) -> Unit,
@@ -71,8 +71,11 @@ fun SkuDetailOverlay(
     }
 
     // Auto-derive a prefix from the first matched EPC.
-    val autoPrefix: String = remember(epcs, prefixLength) {
-        epcs.firstOrNull()?.uppercase()?.take(prefixLength) ?: ""
+    // Угтварыг EPC-ийн БҮТЦЭЭР (серийн өмнөх хэсэг) автоматаар — гар
+    // тохиргооны урт серийн битүүдийг давхар шүүж зарим тагийг алгасдаг
+    // байсан (2026-08-03 зассан). Гараар засах боломж хэвээр.
+    val autoPrefix: String = remember(epcs) {
+        epcs.firstOrNull()?.let { EpcDecoder.productPrefix(it) } ?: ""
     }
 
     var filterPrefix by remember(autoPrefix) { mutableStateOf(autoPrefix) }

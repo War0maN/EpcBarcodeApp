@@ -113,6 +113,8 @@ class MainActivity : ComponentActivity() {
                 // Нүүр grid ↔ дэд дэлгэцүүд (2026-08-02 дизайн). Хүлээн авалт/
                 // Тооллого overlay хэвээр (аль ч дэлгэцийн дээр нээгддэг).
                 var screen by rememberSaveable { mutableStateOf("home") }
+                // Тооллогын дутуу хайж буй бараа (Олох горимын нэр/үлдсэн тоонд).
+                var finderPid by rememberSaveable { mutableStateOf<String?>(null) }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Column(Modifier.padding(innerPadding)) {
@@ -199,7 +201,6 @@ class MainActivity : ComponentActivity() {
                         onOpenSettings = { viewModel.showSettings = true },
                         outputPower = viewModel.outputPower,
                         continuousMode = viewModel.continuousMode,
-                        prefixLength = viewModel.prefixLength,
                         onImportPackingList = {
                             // XLSX MIME types vary; accept any document
                             pickFileLauncher.launch(arrayOf(
@@ -295,6 +296,19 @@ class MainActivity : ComponentActivity() {
                                 viewModel.clearAfterSubmit()
                             }
                         },
+                        onFindMissing = { pid ->
+                            // Уншигчийн төмөр шүүлт = барааны бүтцийн угтвар;
+                            // программын шүүлт = яг дутуу hex-үүд. Олдсон нь
+                            // ердийн урсгалаараа тоологдоно (onNewEpcs).
+                            val missing = syncViewModel.stMissingHexes(pid)
+                            if (missing.isNotEmpty()) {
+                                finderPid = pid
+                                viewModel.finderMatchSet = missing.toSet()
+                                viewModel.finderTargetEpc =
+                                    com.epcbc.core.EpcDecoder.productPrefix(missing.first())
+                                viewModel.showFinder = true
+                            }
+                        },
                         onDismiss = {
                             syncViewModel.showStocktake = false
                             syncViewModel.clearSyncMessages()
@@ -308,7 +322,6 @@ class MainActivity : ComponentActivity() {
                     SkuDetailOverlay(
                         item = item,
                         allScannedEpcs = viewModel.scannedEpcs,
-                        prefixLength = viewModel.prefixLength,
                         isScanning = viewModel.isScanning,
                         onToggleScan = { viewModel.toggleScan() },
                         onFilterChange = { viewModel.applyHardwareFilter(it) },
@@ -321,9 +334,29 @@ class MainActivity : ComponentActivity() {
 
                 // Tag-finder overlay — same in-tree Box pattern so the trigger still routes here.
                 if (viewModel.showFinder) {
+                    // Тооллогын дутуу горимд: нэр + үлдсэн тоо (амьд — олдох
+                    // бүрд тоолол өсч энэ тоо буурна). Target-ыг гараар засвал
+                    // энгийн угтварын горимд буцна.
+                    val finderRemaining = finderPid?.takeIf { viewModel.finderMatchSet != null }?.let { pid ->
+                        val exp = syncViewModel.stExpectedByProduct[pid] ?: 0
+                        val found = maxOf(
+                            syncViewModel.stFoundLocal[pid] ?: 0,
+                            syncViewModel.stFoundServer[pid] ?: 0,
+                        )
+                        (exp - found).coerceAtLeast(0)
+                    }
+                    val finderLabel = finderPid?.takeIf { viewModel.finderMatchSet != null }?.let { pid ->
+                        syncViewModel.stProductMeta[pid]?.let { m -> m.name ?: m.sku }
+                    }
                     FinderOverlay(
                         targetEpc = viewModel.finderTargetEpc,
-                        onTargetChange = { viewModel.finderTargetEpc = it },
+                        onTargetChange = {
+                            viewModel.finderTargetEpc = it
+                            viewModel.finderMatchSet = null
+                            finderPid = null
+                        },
+                        label = finderLabel,
+                        remaining = finderRemaining,
                         active = viewModel.finderActive,
                         percent = viewModel.finderPercent,
                         rssi = viewModel.finderRssi,
@@ -331,7 +364,10 @@ class MainActivity : ComponentActivity() {
                         message = viewModel.finderMessage,
                         onStart = { viewModel.startFinder() },
                         onStop = { viewModel.stopFinder() },
-                        onDismiss = { viewModel.dismissFinder() }
+                        onDismiss = {
+                            viewModel.dismissFinder()
+                            finderPid = null
+                        }
                     )
                 }
 
@@ -339,9 +375,8 @@ class MainActivity : ComponentActivity() {
                     SettingsDialog(
                         currentPower = viewModel.outputPower,
                         currentMode = viewModel.continuousMode,
-                        currentPrefix = viewModel.prefixLength,
                         currentSound = viewModel.soundEnabled,
-                        onApply = { p, c, l, s -> viewModel.applySettings(p, c, l, s) },
+                        onApply = { p, c, s -> viewModel.applySettings(p, c, s) },
                         onDismiss = { viewModel.showSettings = false }
                     )
                 }

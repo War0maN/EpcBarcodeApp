@@ -47,7 +47,6 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     // ── Scan settings ────────────────────────────────────────────────────
     var outputPower by mutableStateOf(30); private set
     var continuousMode by mutableStateOf(true); private set
-    var prefixLength by mutableStateOf(20); private set
     var soundEnabled by mutableStateOf(true); private set
 
     /** Дэлгэцийн горим: system | dark | light (Профайлаас солино, хадгалагдана). */
@@ -71,6 +70,14 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     var finderTargetEpc by mutableStateOf("")
 
     // ── Tag-finder runtime state ─────────────────────────────────────────
+    /**
+     * Олох горимын нарийн тааруулга: null биш үед зөвхөн ЭНЭ олонлогийн
+     * hex-үүд Geiger-т тооцогдоно (тооллогын дутуу гэх мэт — уншигчийн
+     * төмөр шүүлт барааны угтвараар, программын шүүлт яг дутуу дээр).
+     * null үед хуучин зан төлөв: finderTargetEpc угтвараар.
+     */
+    var finderMatchSet by mutableStateOf<Set<String>?>(null)
+
     var finderActive by mutableStateOf(false); private set
     var finderRssi by mutableStateOf<Int?>(null); private set
     var finderPercent by mutableStateOf(0); private set
@@ -308,8 +315,11 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                                 if (epc != null) {
                                     epcStream.push(epc)   // O(1) enqueue, never blocks
 
-                                    if (finderActive && finderTargetEpc.isNotBlank() &&
-                                        epc.uppercase().startsWith(finderTargetEpc.uppercase())) {
+                                    val epcUp = epc.uppercase()
+                                    val finderHit = finderMatchSet?.contains(epcUp)
+                                        ?: (finderTargetEpc.isNotBlank() &&
+                                            epcUp.startsWith(finderTargetEpc.uppercase()))
+                                    if (finderActive && finderHit) {
                                         val rssi = extractRssi(tagInfo)
                                         if (rssi != null) {
                                             val now = System.currentTimeMillis()
@@ -496,10 +506,9 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ── Settings + session persistence ───────────────────────────────────
-    fun applySettings(power: Int, continuous: Boolean, prefix: Int, sound: Boolean) {
+    fun applySettings(power: Int, continuous: Boolean, sound: Boolean) {
         outputPower = power
         continuousMode = continuous
-        prefixLength = prefix
         soundEnabled = sound
         applyPower(power)
         saveSettings()
@@ -510,17 +519,15 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         val p = getApplication<Application>().getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
         outputPower = p.getInt("power", 30)
         continuousMode = p.getBoolean("continuous", true)
-        prefixLength = p.getInt("prefix_length", 20)
         soundEnabled = p.getBoolean("sound", true)
         themeMode = p.getString("theme", "system") ?: "system"
-        Log.i(TAG, "loadSettings: power=$outputPower mode=${if (continuousMode) "auto" else "single"} prefix=$prefixLength sound=$soundEnabled")
+        Log.i(TAG, "loadSettings: power=$outputPower mode=${if (continuousMode) "auto" else "single"} sound=$soundEnabled")
     }
 
     private fun saveSettings() {
         getApplication<Application>().getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE).edit()
             .putInt("power", outputPower)
             .putBoolean("continuous", continuousMode)
-            .putInt("prefix_length", prefixLength)
             .putBoolean("sound", soundEnabled)
             .putString("theme", themeMode)
             .apply()
@@ -661,6 +668,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     fun dismissFinder() {
         stopFinder()
         finderMessage = null
+        finderMatchSet = null
         showFinder = false
     }
 

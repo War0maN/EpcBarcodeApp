@@ -47,6 +47,9 @@ import androidx.compose.ui.unit.sp
 fun FinderOverlay(
     targetEpc: String,
     onTargetChange: (String) -> Unit,
+    /** Тооллогын дутуу хайх горимд: барааны нэр + үлдсэн тоо (амьд). */
+    label: String? = null,
+    remaining: Int? = null,
     active: Boolean,
     percent: Int,
     rssi: Int?,
@@ -99,11 +102,21 @@ fun FinderOverlay(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "🎯 Tag олох",
+                    text = if (label != null) "🎯 Олох: $label" else "🎯 Tag олох",
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = Color(0xFF111827)
                 )
+                if (remaining != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (remaining > 0) "Дутуу үлдсэн: $remaining ширхэг — олдмогц шууд тоологдоно."
+                               else "✓ Бүгд олдлоо!",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = if (remaining > 0) Color(0xFFD97706) else Color(0xFF059669)
+                    )
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Хайх EPC-ээ оруулаад \"Эхлэх\" дар. C5-аа эргэлдүүлээд RSSI хувь дээшилж байгаа чиглэлд яв.",

@@ -224,6 +224,12 @@ class SyncViewModel : ViewModel() {
     private var stExpectedByHex: Map<String, String> = emptyMap()
     /** productId → snapshot дахь ширхэг. */
     var stExpectedByProduct: Map<String, Int> = emptyMap(); private set
+    /** productId → хүлээгдэх hex-үүд (дутуугаа нэрээр нь олоход). */
+    private var stExpectedHexesByProduct: Map<String, List<String>> = emptyMap()
+
+    /** Тухайн барааны ОДООГООР дутуу hex-үүд (хүлээгдэх − тоологдсон). */
+    fun stMissingHexes(productId: String): List<String> =
+        (stExpectedHexesByProduct[productId] ?: emptyList()).filter { it !in stSeenLocal }
     /** productId → нэр/SKU (дэлгэцэд). */
     var stProductMeta: Map<String, StocktakeApi.ProductInfo> = emptyMap(); private set
 
@@ -264,6 +270,7 @@ class SyncViewModel : ViewModel() {
         activeStocktake = st
         stExpectedByHex = emptyMap()
         stExpectedByProduct = emptyMap()
+        stExpectedHexesByProduct = emptyMap()
         stProductMeta = emptyMap()
         stSeenLocal.clear()
         stFoundLocal.clear()
@@ -277,6 +284,7 @@ class SyncViewModel : ViewModel() {
                 val items = StocktakeApi.fetchExpectedItems(st.id)
                 stExpectedByHex = items.associate { it.epcHex.trim().uppercase() to it.productId }
                 stExpectedByProduct = items.groupingBy { it.productId }.eachCount()
+                stExpectedHexesByProduct = items.groupBy({ it.productId }, { it.epcHex.trim().uppercase() })
                 stProductMeta = StocktakeApi.fetchProducts(stExpectedByProduct.keys)
 
                 // Серверийн явцаар локал тоолуураа СУУЛГАНА (0-ээс биш) —

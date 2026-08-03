@@ -41,14 +41,12 @@ import androidx.compose.ui.window.Dialog
 fun SettingsDialog(
     currentPower: Int,
     currentMode: Boolean,
-    currentPrefix: Int,
     currentSound: Boolean,
-    onApply: (power: Int, continuous: Boolean, prefixLen: Int, sound: Boolean) -> Unit,
+    onApply: (power: Int, continuous: Boolean, sound: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var power by remember { mutableStateOf(currentPower) }
     var continuous by remember { mutableStateOf(currentMode) }
-    var prefix by remember { mutableStateOf(currentPrefix) }
     var sound by remember { mutableStateOf(currentSound) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -115,29 +113,10 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Prefix length slider
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(text = "EPC prefix урт:", fontWeight = FontWeight.Bold)
-                    Text(text = "$prefix орон", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                }
-                Text(
-                    text = "Бараан дээр дарж дэлгэрэнгүйг харахад \"яг энэ бүтээгдэхүүн\" гэж танихад EPC-ийн эхний хэдэн орон ижил байх ёстойг тогтооно. Жишээ нь Levi's-д ихэвчлэн 20 орон ажилладаг. Багасгахад илүү олон tag нийтлэгт орно, ихэсгэхэд илүү нарийн хайна.",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = prefix.toFloat(),
-                    onValueChange = { prefix = it.toInt() },
-                    valueRange = 8f..23f,
-                    steps = 14
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     OutlinedButton(onClick = onDismiss) { Text("Цуцлах") }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = { onApply(power, continuous, prefix, sound) }) { Text("Хадгалах") }
+                    Button(onClick = { onApply(power, continuous, sound) }) { Text("Хадгалах") }
                 }
             }
         }

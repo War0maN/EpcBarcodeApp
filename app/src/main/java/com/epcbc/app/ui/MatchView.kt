@@ -37,7 +37,6 @@ import com.epcbc.data.PackingListReader
 fun MatchView(
     packingList: List<PackingListReader.PackingItem>,
     scannedEpcs: List<String>,
-    prefixLength: Int,
     onSelectItem: (PackingListReader.PackingItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
