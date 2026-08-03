@@ -162,11 +162,11 @@ class MainActivity : ComponentActivity() {
                     "profile" -> ProfileScreen(
                         email = syncViewModel.userEmail,
                         loggedIn = loggedIn,
-                        themeMode = viewModel.themeMode,
+                        isDark = darkTheme,
                         passwordBusy = syncViewModel.passwordBusy,
                         passwordMessage = syncViewModel.passwordMessage,
-                        onThemeChange = { viewModel.setTheme(it) },
-                        onChangePassword = { syncViewModel.changePassword(it) },
+                        onToggleDark = { viewModel.setTheme(if (it) "dark" else "light") },
+                        onChangePassword = { old, new -> syncViewModel.changePassword(old, new) },
                         onLogout = {
                             syncViewModel.logout()
                             screen = "home"

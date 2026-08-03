@@ -1,5 +1,6 @@
 package com.epcbc.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -70,6 +71,9 @@ fun StocktakeOverlay(
     onSubmit: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // Back товч: тооллого сонгосон бол жагсаалт руу, эс бөгөөс overlay хаана.
+    BackHandler(onBack = { if (active != null) onSelect(null) else onDismiss() })
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,

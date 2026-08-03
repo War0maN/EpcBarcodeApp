@@ -74,7 +74,12 @@ class SyncViewModel : ViewModel() {
     var passwordBusy by mutableStateOf(false); private set
     var passwordMessage by mutableStateOf<String?>(null); private set
 
-    fun changePassword(newPassword: String) {
+    fun changePassword(oldPassword: String, newPassword: String) {
+        val email = Supa.userEmail
+        if (email == null) {
+            passwordMessage = "Нэвтрээгүй байна."
+            return
+        }
         if (newPassword.length < 6) {
             passwordMessage = "Нууц үг дор хаяж 6 тэмдэгт байх ёстой."
             return
@@ -83,6 +88,19 @@ class SyncViewModel : ViewModel() {
         passwordMessage = null
         viewModelScope.launch {
             try {
+                // Хуучин нууц үгээ дахин нэвтэрч баталгаажуулна — дундын
+                // төхөөрөмж дээр орхигдсон session-ээр өөр хүн сольчихоос
+                // сэргийлнэ (ижил хэрэглэгчээр тул session хэвийн үлдэнэ).
+                try {
+                    Supa.client.auth.signInWith(Email) {
+                        this.email = email
+                        this.password = oldPassword
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "changePassword: old password check failed", e)
+                    passwordMessage = "Хуучин нууц үг буруу байна."
+                    return@launch
+                }
                 Supa.client.auth.updateUser { password = newPassword }
                 passwordMessage = "Нууц үг солигдлоо."
             } catch (e: Exception) {

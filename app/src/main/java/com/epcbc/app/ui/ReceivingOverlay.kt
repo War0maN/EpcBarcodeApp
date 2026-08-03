@@ -1,5 +1,6 @@
 package com.epcbc.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,10 @@ fun ReceivingOverlay(
     onSubmit: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // Back товч: ажил сонгосон бол жагсаалт руу, эс бөгөөс overlay хаана —
+    // өмнө нь бүтэн аппыг хаадаг байсан (2026-08-03 илэрсэн).
+    BackHandler(onBack = { if (activeReceipt != null) onSelect(null) else onDismiss() })
+
     // Surface — Modifier.background() БИШ: background() нь зөвхөн будна,
     // LocalContentColor-ыг шинэчилдэггүй тул өнгө нь ил зааагүй бүх Text
     // үлдэгдэл ХАР өнгөөр гарч, dark theme дээр огт уншигдахгүй болдог.
