@@ -28,6 +28,7 @@ import com.epcbc.app.ui.FinderOverlay
 import com.epcbc.app.ui.LoginScreen
 import com.epcbc.app.ui.HomeScreen
 import com.epcbc.app.ui.HomeTile
+import com.epcbc.app.ui.ProfileScreen
 import com.epcbc.app.ui.ReceivingOverlay
 import com.epcbc.app.ui.ScanScreen
 import com.epcbc.app.ui.SearchScreen
@@ -67,7 +68,13 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            EpcBarcodeappTheme {
+            // Дэлгэцийн горим Профайлаас сонгогдоно (system/dark/light).
+            val darkTheme = when (viewModel.themeMode) {
+                "dark" -> true
+                "light" -> false
+                else -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+            EpcBarcodeappTheme(darkTheme = darkTheme) {
                 val pickFileLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument()
                 ) { uri: Uri? -> if (uri != null) viewModel.loadPackingList(uri) }
@@ -111,7 +118,6 @@ class MainActivity : ComponentActivity() {
                     Column(Modifier.padding(innerPadding)) {
                     when (screen) {
                     "home" -> HomeScreen(
-                        email = syncViewModel.userEmail,
                         loggedIn = loggedIn,
                         readerReady = viewModel.readerReady,
                         readerStatus = viewModel.statusMessage,
@@ -128,8 +134,7 @@ class MainActivity : ComponentActivity() {
                             HomeTile("settings", "⚙️", "Тохиргоо"),
                         ),
                         onRetryReader = { viewModel.initReader() },
-                        onLogin = { syncViewModel.skipLogin = false },
-                        onLogout = { syncViewModel.logout() },
+                        onOpenProfile = { screen = "profile" },
                         onOpen = { key ->
                             when (key) {
                                 "stocktake" -> {
@@ -152,6 +157,27 @@ class MainActivity : ComponentActivity() {
                         onFind = { prefix ->
                             viewModel.finderTargetEpc = prefix
                             viewModel.showFinder = true
+                        },
+                    )
+                    "profile" -> ProfileScreen(
+                        email = syncViewModel.userEmail,
+                        loggedIn = loggedIn,
+                        themeMode = viewModel.themeMode,
+                        passwordBusy = syncViewModel.passwordBusy,
+                        passwordMessage = syncViewModel.passwordMessage,
+                        onThemeChange = { viewModel.setTheme(it) },
+                        onChangePassword = { syncViewModel.changePassword(it) },
+                        onLogout = {
+                            syncViewModel.logout()
+                            screen = "home"
+                        },
+                        onLogin = {
+                            syncViewModel.skipLogin = false
+                            screen = "home"
+                        },
+                        onBack = {
+                            syncViewModel.clearPasswordMessage()
+                            screen = "home"
                         },
                     )
                     else -> Column {

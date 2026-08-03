@@ -20,6 +20,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,9 +74,13 @@ fun StocktakeOverlay(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
     ) {
+        // statusBarsPadding — overlay нь Scaffold-ын гадна зурагддаг тул
+        // толгой нь статус барын доор орж "дээр тулчихсан" харагдаж байсныг
+        // нүүрний толгойтой ижил түвшинд буулгана (2026-08-03).
         Column(
             Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(12.dp)
         ) {
             // Толгой
@@ -88,9 +100,32 @@ fun StocktakeOverlay(
 
             if (active == null) {
                 // ---------- Тооллогын жагсаалт ----------
-                Row(Modifier.padding(vertical = 4.dp)) {
+                // Салбарын шүүлт: ажлууд >1 салбарынх байвал л харагдана
+                // (нэг салбартай хэрэглэгчид илүү алхам үүсгэхгүй — 2026-08-03).
+                var branchFilter by remember { mutableStateOf<String?>(null) }
+                var branchMenuOpen by remember { mutableStateOf(false) }
+                val branches = stocktakes.map { it.branchName }.distinct()
+                val shown = if (branchFilter == null) stocktakes
+                            else stocktakes.filter { it.branchName == branchFilter }
+
+                Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onRefreshList, enabled = !stocktakesLoading) {
                         Text(if (stocktakesLoading) "Татаж байна…" else "↻ Сэргээх")
+                    }
+                    if (branches.size > 1) {
+                        Box {
+                            OutlinedButton(onClick = { branchMenuOpen = true }) {
+                                Text("Салбар: ${branchFilter ?: "Бүгд"} ▾")
+                            }
+                            DropdownMenu(expanded = branchMenuOpen, onDismissRequest = { branchMenuOpen = false }) {
+                                DropdownMenuItem(text = { Text("Бүх салбар") },
+                                    onClick = { branchFilter = null; branchMenuOpen = false })
+                                branches.forEach { b ->
+                                    DropdownMenuItem(text = { Text(b) },
+                                        onClick = { branchFilter = b; branchMenuOpen = false })
+                                }
+                            }
+                        }
                     }
                 }
                 if (stocktakes.isEmpty() && !stocktakesLoading) {
@@ -100,7 +135,7 @@ fun StocktakeOverlay(
                     )
                 }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(stocktakes, key = { it.id }) { st ->
+                    items(shown, key = { it.id }) { st ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()

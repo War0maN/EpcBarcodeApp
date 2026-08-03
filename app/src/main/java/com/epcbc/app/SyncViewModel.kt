@@ -70,6 +70,32 @@ class SyncViewModel : ViewModel() {
         }
     }
 
+    // ── Нууц үг солих (Профайл дэлгэцээс) ──
+    var passwordBusy by mutableStateOf(false); private set
+    var passwordMessage by mutableStateOf<String?>(null); private set
+
+    fun changePassword(newPassword: String) {
+        if (newPassword.length < 6) {
+            passwordMessage = "Нууц үг дор хаяж 6 тэмдэгт байх ёстой."
+            return
+        }
+        passwordBusy = true
+        passwordMessage = null
+        viewModelScope.launch {
+            try {
+                Supa.client.auth.updateUser { password = newPassword }
+                passwordMessage = "Нууц үг солигдлоо."
+            } catch (e: Exception) {
+                Log.w(TAG, "changePassword failed", e)
+                passwordMessage = "Алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                passwordBusy = false
+            }
+        }
+    }
+
+    fun clearPasswordMessage() { passwordMessage = null }
+
     fun logout() {
         viewModelScope.launch {
             try {

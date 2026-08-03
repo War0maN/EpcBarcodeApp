@@ -44,20 +44,18 @@ data class HomeTile(
  */
 @Composable
 fun HomeScreen(
-    email: String?,
     loggedIn: Boolean,
     readerReady: Boolean,
     readerStatus: String,
     outputPower: Int,
     tiles: List<HomeTile>,
     onRetryReader: () -> Unit,
-    onLogin: () -> Unit,
-    onLogout: () -> Unit,
+    onOpenProfile: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().padding(12.dp)) {
-            // Толгой: нэр + акаунт
+            // Толгой: нэр + профайл (имэйл/Гарах нь Профайл дотор — 2026-08-03).
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "Chipmo Inventory",
@@ -65,24 +63,14 @@ fun HomeScreen(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
-                if (loggedIn) {
-                    Text(
-                        email ?: "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    TextButton(onClick = onLogout) { Text("Гарах") }
-                } else {
+                if (!loggedIn) {
                     Text(
                         "Офлайн",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TextButton(onClick = onLogin) { Text("Нэвтрэх") }
                 }
+                TextButton(onClick = onOpenProfile) { Text("👤", fontSize = 20.sp) }
             }
 
             // Уншигчийн төлвийн мөр — бэлэн биш үед дарахад дахин оролдоно.
@@ -114,15 +102,18 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(tiles, key = { it.key }) { tile ->
+                    // Тогтмол өндөр — subtitle-тэй/гүй нүднүүд яг ижил хэмжээтэй.
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(120.dp)
                             .alpha(if (tile.enabled) 1f else 0.45f)
                             .let { m -> if (tile.enabled) m.clickable { onOpen(tile.key) } else m },
                     ) {
                         Column(
-                            Modifier.fillMaxWidth().padding(vertical = 18.dp),
+                            Modifier.fillMaxSize(),
                             horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                         ) {
                             Text(tile.emoji, fontSize = 30.sp)
                             Spacer(Modifier.height(6.dp))

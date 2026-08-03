@@ -50,6 +50,13 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     var prefixLength by mutableStateOf(20); private set
     var soundEnabled by mutableStateOf(true); private set
 
+    /** Дэлгэцийн горим: system | dark | light (Профайлаас солино, хадгалагдана). */
+    var themeMode by mutableStateOf("system"); private set
+    fun setTheme(mode: String) {
+        themeMode = mode
+        saveSettings()
+    }
+
     /**
      * Шинэ (давхардаагүй) EPC ирэх бүрд main thread дээр дуудагдах hook —
      * тооллого зэрэг горимууд амьд тулгалтаа O(багц)-аар хийнэ. MainActivity
@@ -505,6 +512,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         continuousMode = p.getBoolean("continuous", true)
         prefixLength = p.getInt("prefix_length", 20)
         soundEnabled = p.getBoolean("sound", true)
+        themeMode = p.getString("theme", "system") ?: "system"
         Log.i(TAG, "loadSettings: power=$outputPower mode=${if (continuousMode) "auto" else "single"} prefix=$prefixLength sound=$soundEnabled")
     }
 
@@ -514,6 +522,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
             .putBoolean("continuous", continuousMode)
             .putInt("prefix_length", prefixLength)
             .putBoolean("sound", soundEnabled)
+            .putString("theme", themeMode)
             .apply()
     }
 

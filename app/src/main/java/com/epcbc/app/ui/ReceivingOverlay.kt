@@ -20,6 +20,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,9 +66,11 @@ fun ReceivingOverlay(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
     ) {
+        // statusBarsPadding — толгой нүүрний толгойтой ижил түвшинд (2026-08-03).
         Column(
             Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(12.dp)
         ) {
             // Толгой
@@ -80,9 +90,31 @@ fun ReceivingOverlay(
 
             if (activeReceipt == null) {
                 // ---------- Ажлын жагсаалт ----------
-                Row(Modifier.padding(vertical = 4.dp)) {
+                // Салбарын шүүлт — >1 салбар үед л (тооллоготой ижил хэв маяг).
+                var branchFilter by remember { mutableStateOf<String?>(null) }
+                var branchMenuOpen by remember { mutableStateOf(false) }
+                val branches = receipts.map { it.branchName }.distinct()
+                val shown = if (branchFilter == null) receipts
+                            else receipts.filter { it.branchName == branchFilter }
+
+                Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onRefreshReceipts, enabled = !receiptsLoading) {
                         Text(if (receiptsLoading) "Татаж байна…" else "↻ Сэргээх")
+                    }
+                    if (branches.size > 1) {
+                        Box {
+                            OutlinedButton(onClick = { branchMenuOpen = true }) {
+                                Text("Салбар: ${branchFilter ?: "Бүгд"} ▾")
+                            }
+                            DropdownMenu(expanded = branchMenuOpen, onDismissRequest = { branchMenuOpen = false }) {
+                                DropdownMenuItem(text = { Text("Бүх салбар") },
+                                    onClick = { branchFilter = null; branchMenuOpen = false })
+                                branches.forEach { b ->
+                                    DropdownMenuItem(text = { Text(b) },
+                                        onClick = { branchFilter = b; branchMenuOpen = false })
+                                }
+                            }
+                        }
                     }
                 }
                 if (receipts.isEmpty() && !receiptsLoading) {
@@ -92,7 +124,7 @@ fun ReceivingOverlay(
                     )
                 }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(receipts, key = { it.id }) { r ->
+                    items(shown, key = { it.id }) { r ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
