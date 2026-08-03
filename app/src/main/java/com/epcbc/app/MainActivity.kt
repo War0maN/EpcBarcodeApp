@@ -203,7 +203,11 @@ class MainActivity : ComponentActivity() {
                         error = syncViewModel.syncError,
                         onRefreshList = { syncViewModel.refreshStocktakes() },
                         onSelect = { st ->
-                            syncViewModel.selectStocktake(st, viewModel.scannedEpcs.toList())
+                            // Сонгоход серверийн өмнөх байдал татагдаж, буфер шинэ
+                            // ажилдаа цэвэрлэгдэнэ (өмнөх ажлын уншилт хутгалдахгүй).
+                            syncViewModel.selectStocktake(st) { serverSeen ->
+                                viewModel.resetForJob(serverSeen)
+                            }
                         },
                         onRefreshProgress = { syncViewModel.refreshStocktakeProgress() },
                         onSubmit = {

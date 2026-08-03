@@ -208,10 +208,15 @@ class SyncViewModel : ViewModel() {
     }
 
     /**
-     * Тооллого сонгоход snapshot-ыг бүтнээр татаж, локал тулгалтыг тэглэнэ.
-     * [seedHexes] — сонгохоос ӨМНӨ буферт байсан уншилтууд (тэдгээрийг ч тооцно).
+     * Тооллого сонгоход snapshot + СЕРВЕРИЙН ӨМНӨХ БАЙДЛЫГ бүтнээр татна:
+     * явц (бараагаар) + аль хэдийн бүртгэгдсэн hex-үүд. Апп хаагдаж дахин
+     * нээгдсэн ч өмнө тоолсноосоо үргэлжилнэ (2026-08-02 хэрэглэгчийн хүсэлт —
+     * өмнө нь 0/N болж харагдаад төөрөгдүүлдэг байсан; дата серверт бүрэн
+     * байсаар байсан). Бүгд сонгох мөчид НЭГ удаа — скан үед сүлжээ хэрэггүй.
+     * [onServerState] — бүртгэгдсэн hex-үүдийг ScanViewModel-д "үзсэн" гэж
+     * тэмдэглүүлэх (дахин уншигдвал Илгээх тоолуур хий дэмий өсөхгүй).
      */
-    fun selectStocktake(st: StocktakeApi.Stocktake?, seedHexes: List<String> = emptyList()) {
+    fun selectStocktake(st: StocktakeApi.Stocktake?, onServerState: ((List<String>) -> Unit)? = null) {
         activeStocktake = st
         stExpectedByHex = emptyMap()
         stExpectedByProduct = emptyMap()
@@ -229,9 +234,21 @@ class SyncViewModel : ViewModel() {
                 stExpectedByHex = items.associate { it.epcHex.trim().uppercase() to it.productId }
                 stExpectedByProduct = items.groupingBy { it.productId }.eachCount()
                 stProductMeta = StocktakeApi.fetchProducts(stExpectedByProduct.keys)
-                onStocktakeScans(seedHexes)
+
+                // Серверийн явцаар локал тоолуураа СУУЛГАНА (0-ээс биш) —
+                // шинэ уншилт үүн дээр нэмэгдэж явна.
+                for (r in StocktakeApi.fetchProgress(st.id)) {
+                    stFoundLocal[r.productId] = r.found
+                    stFoundServer[r.productId] = r.found
+                }
+                val scanned = StocktakeApi.fetchScannedHexes(st.id)
+                for (s in scanned) {
+                    stSeenLocal.add(s.epcHex.trim().uppercase())
+                    if (s.outcome != "found") stExtraLocal++
+                }
+                onServerState?.invoke(scanned.map { it.epcHex.trim().uppercase() })
             } catch (e: Exception) {
-                Log.w(TAG, "fetchExpectedItems failed", e)
+                Log.w(TAG, "selectStocktake load failed", e)
                 syncError = "Тооллогын жагсаалт татахад алдаа: ${e.message ?: "холболт"}"
                 activeStocktake = null
             } finally {

@@ -101,6 +101,36 @@ object StocktakeApi {
     }
 
     @Serializable
+    data class ScanRow(
+        @SerialName("epc_hex") val epcHex: String,
+        val outcome: String,
+    )
+
+    /**
+     * Энэ тооллогод аль хэдийн бүртгэгдсэн БҮХ уншилт (found/not_expected/
+     * unknown) — апп дахин нээгдэхэд өмнөх байдлаас үргэлжлүүлэхэд.
+     * fetchExpectedItems-тэй ижил хуудаслана (1000-ын хязгаар).
+     */
+    suspend fun fetchScannedHexes(stocktakeId: String): List<ScanRow> {
+        val out = ArrayList<ScanRow>()
+        val page = 1000
+        var from = 0L
+        while (true) {
+            val chunk = Supa.client.postgrest.from("stocktake_scans")
+                .select(Columns.raw("epc_hex, outcome")) {
+                    filter { eq("stocktake_id", stocktakeId) }
+                    order("epc_hex", Order.ASCENDING)
+                    range(from, from + page - 1)
+                }
+                .decodeList<ScanRow>()
+            out.addAll(chunk)
+            if (chunk.size < page) break
+            from += page
+        }
+        return out
+    }
+
+    @Serializable
     data class ProgressRow(
         @SerialName("product_id") val productId: String,
         val expected: Int,
