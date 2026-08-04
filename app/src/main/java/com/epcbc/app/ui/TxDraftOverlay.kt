@@ -94,7 +94,12 @@ fun TxDraftOverlay(
     onDismiss: () -> Unit,
 ) {
     val isTransfer = type == "transfer"
-    val title = if (isTransfer) "Шилжүүлэг" else "Актлалт"
+    val title = when (type) {
+        "transfer" -> "Шилжүүлэг"
+        "other" -> "Актлалт"
+        "sale" -> "Борлуулалт"
+        else -> "Буцаалт"
+    }
 
     // Баталгаажуулалт: submit/cancel хоёрт in-tree жижиг карт (Dialog биш).
     var confirm by rememberSaveable { mutableStateOf<String?>(null) }
@@ -154,7 +159,7 @@ fun TxDraftOverlay(
                                     }
                                 }
                             }
-                        } else {
+                        } else if (type == "other") {
                             // Актлалтад шалтгаан заавал — тайлан шалтгаанаар бүлэглэдэг
                             // (сервер шаарддаггүй ч энд шаардаж хэвшүүлнэ).
                             OutlinedTextField(
@@ -164,12 +169,32 @@ fun TxDraftOverlay(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                             )
+                        } else {
+                            // Борлуулалт/Буцаалт: тэмдэглэл сонголтоор.
+                            OutlinedTextField(
+                                value = note,
+                                onValueChange = { note = it },
+                                label = { Text("Тэмдэглэл (сонголт)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                            )
+                        }
+                        if (type == "return") {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Буцаалтын сагсанд Борлуулсан/Актлагдсан таг л орно.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         Spacer(Modifier.height(8.dp))
                         Button(
                             onClick = { onCreate(toBranch, note.trim().ifEmpty { null }) },
-                            enabled = !submitBusy &&
-                                (if (isTransfer) toBranch != null else note.trim().isNotEmpty()),
+                            enabled = !submitBusy && when (type) {
+                                "transfer" -> toBranch != null
+                                "other" -> note.trim().isNotEmpty()
+                                else -> true
+                            },
                         ) { Text("＋ Сагс нээх") }
                     }
                 }
@@ -401,7 +426,14 @@ fun TxDraftOverlay(
                         Column(Modifier.padding(12.dp)) {
                             Text(
                                 if (confirm == "submit")
-                                    "$cartCount ширхгийг ${if (isTransfer) "«${branchName(active.toBranch)}» руу шилжүүлэх" else "актлах"} уу?" +
+                                    "$cartCount ширхгийг ${
+                                        when (type) {
+                                            "transfer" -> "«${branchName(active.toBranch)}» руу шилжүүлэх"
+                                            "other" -> "актлах"
+                                            "sale" -> "борлуулах"
+                                            else -> "буцаан авах"
+                                        }
+                                    } уу?" +
                                         (if (jobRows.isNotEmpty() && shortfall > 0)
                                             "\n⚠ Даалгаснаас $shortfall ширхэг ДУТУУ байна."
                                         else "")

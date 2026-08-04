@@ -638,7 +638,12 @@ class SyncViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val r = TxDraftApi.submit(d.id)
-                val label = if (d.type == "transfer") "Шилжүүлэг" else "Актлалт"
+                val label = when (d.type) {
+                    "transfer" -> "Шилжүүлэг"
+                    "other" -> "Актлалт"
+                    "sale" -> "Борлуулалт"
+                    else -> "Буцаалт"
+                }
                 syncMessage = buildString {
                     append("$label ${r.txNumber ?: ""} үүслээ — ${r.submitted} ширхэг.")
                     if (r.pruned > 0) append(" (${r.pruned} хүчингүй таг хасагдав.)")
@@ -676,7 +681,9 @@ class SyncViewModel : ViewModel() {
         val labels = mapOf(
             "added" to "Сагсанд орсон",
             "already" to "Өмнө орсон",
-            "not_active" to "Идэвхтэй биш",
+            // Шаардлага төрлөөс хамаардаг (return = Борлуулсан/Актлагдсан л
+            // орно) тул нэр нь ерөнхий.
+            "not_active" to "Төлөв тохирохгүй",
             "wrong_branch" to "Өөр салбарын",
             "no_access" to "Эрхгүй салбар",
             "unknown" to "Бүртгэлгүй",

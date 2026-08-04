@@ -141,7 +141,10 @@ class MainActivity : ComponentActivity() {
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
                             HomeTile("writeoff", "🗑", "Актлалт",
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
-                            HomeTile("sale", "🛒", "Борлуулалт", subtitle = "удахгүй", enabled = false),
+                            HomeTile("sale", "🛒", "Борлуулалт",
+                                subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
+                            HomeTile("saleReturn", "↩️", "Буцаалт",
+                                subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
                             HomeTile("settings", "⚙️", "Тохиргоо"),
                         ),
                         onRetryReader = { viewModel.initReader() },
@@ -158,6 +161,8 @@ class MainActivity : ComponentActivity() {
                                 }
                                 "transfer" -> syncViewModel.openTxDraft("transfer")
                                 "writeoff" -> syncViewModel.openTxDraft("other")
+                                "sale" -> syncViewModel.openTxDraft("sale")
+                                "saleReturn" -> syncViewModel.openTxDraft("return")
                                 "search" -> screen = "search"
                                 "check" -> screen = "check"
                                 "settings" -> viewModel.showSettings = true
