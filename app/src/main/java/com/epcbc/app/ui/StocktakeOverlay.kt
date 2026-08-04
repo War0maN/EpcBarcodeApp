@@ -240,8 +240,9 @@ fun StocktakeOverlay(
     }
 }
 
+/** Нэг тоон статистик (Тооллого + Шилжүүлэг/Актлалтын overlay хуваалцана). */
 @Composable
-private fun StStat(label: String, value: String, color: Color) {
+internal fun StStat(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
         Text(label, style = MaterialTheme.typography.labelSmall,

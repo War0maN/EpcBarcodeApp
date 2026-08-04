@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.epcbc.net.ReceivingApi
 import com.epcbc.net.StocktakeApi
 import com.epcbc.net.Supa
+import com.epcbc.net.TxDraftApi
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
@@ -127,6 +128,9 @@ class SyncViewModel : ViewModel() {
             selectStocktake(null)
             stocktakes = emptyList()
             showStocktake = false
+            selectTxDraft(null)
+            txDrafts = emptyList()
+            showTxDraft = false
             syncMessage = null
             syncError = null
         }
@@ -367,6 +371,233 @@ class SyncViewModel : ViewModel() {
                 submitBusy = false
             }
         }
+    }
+
+    // ══════════════ ШАТ 2: Шилжүүлэг / Актлалт (ноорог-сагс) ══════════════
+    // Уншсан таг бүр СЕРВЕРТ шууд сагслагдана (tx_draft_scan idempotent) —
+    // апп унтарсан ч сагс алдагдахгүй, дахин нээгээд үргэлжилнэ. "Гүйлгээ
+    // болгох" үед submit_tx_draft → create_transaction (шалгалт бүгд DB талд).
+
+    var showTxDraft by mutableStateOf(false)
+    /** transfer | other — нүүрний аль нүднээс орсноор тогтоно. */
+    var txType by mutableStateOf("transfer"); private set
+
+    var txBranches by mutableStateOf<List<TxDraftApi.Branch>>(emptyList()); private set
+    var txDrafts by mutableStateOf<List<TxDraftApi.Draft>>(emptyList()); private set
+    var txDraftsLoading by mutableStateOf(false); private set
+    var activeDraft by mutableStateOf<TxDraftApi.Draft?>(null); private set
+    var txItemsLoading by mutableStateOf(false); private set
+    /** productId → сагсан дахь EPC-үүд (мөр нь бараагаар бүлэглэгдэж зурагдана). */
+    var txCartByProduct by mutableStateOf<Map<String, List<TxDraftApi.CartItem>>>(emptyMap()); private set
+    var txProductMeta by mutableStateOf<Map<String, StocktakeApi.ProductInfo>>(emptyMap()); private set
+
+    val txCartCount: Int get() = txCartByProduct.values.sumOf { it.size }
+    fun txBranchName(id: String?): String? = txBranches.firstOrNull { it.id == id }?.name
+
+    /** Нүүрний нүднээс: төрөл тогтоож, жагсаалт + салбаруудыг татна. */
+    fun openTxDraft(type: String) {
+        txType = type
+        showTxDraft = true
+        activeDraft = null
+        txCartByProduct = emptyMap()
+        refreshTxDrafts()
+        if (txBranches.isEmpty()) {
+            viewModelScope.launch {
+                try {
+                    txBranches = TxDraftApi.listBranches()
+                } catch (e: Exception) {
+                    Log.w(TAG, "listBranches failed", e)
+                }
+            }
+        }
+    }
+
+    fun refreshTxDrafts() {
+        txDraftsLoading = true
+        syncError = null
+        viewModelScope.launch {
+            try {
+                txDrafts = TxDraftApi.listOpenDrafts(txType)
+            } catch (e: Exception) {
+                Log.w(TAG, "listOpenDrafts failed", e)
+                syncError = "Ноорогийн жагсаалт татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                txDraftsLoading = false
+            }
+        }
+    }
+
+    /** Шинэ сагс үүсгээд шууд идэвхжүүлнэ. */
+    fun createTxDraft(toBranch: String?, note: String?, onServerState: ((List<String>) -> Unit)? = null) {
+        submitBusy = true
+        syncError = null
+        viewModelScope.launch {
+            try {
+                val id = TxDraftApi.createDraft(txType, toBranch, note)
+                val d = TxDraftApi.Draft(
+                    id = id, type = txType, toBranch = toBranch, note = note,
+                    status = "open", createdAt = "",
+                )
+                selectTxDraftInternal(d, onServerState)
+            } catch (e: Exception) {
+                Log.w(TAG, "createDraft failed", e)
+                syncError = "Сагс үүсгэхэд алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                submitBusy = false
+            }
+        }
+    }
+
+    /**
+     * Ноорог сонгож сагсыг нь татна. [onServerState]-д сагсан дахь hex-үүдийг
+     * өгнө — ScanViewModel "үзсэн" гэж тэмдэглэснээр аль хэдийн сагсалсан таг
+     * дахин уншигдвал Илгээх буферт дэмий орохгүй.
+     */
+    fun selectTxDraft(d: TxDraftApi.Draft?, onServerState: ((List<String>) -> Unit)? = null) {
+        if (d == null) {
+            activeDraft = null
+            txCartByProduct = emptyMap()
+            syncMessage = null
+            return
+        }
+        viewModelScope.launch { selectTxDraftInternal(d, onServerState) }
+    }
+
+    private suspend fun selectTxDraftInternal(
+        d: TxDraftApi.Draft,
+        onServerState: ((List<String>) -> Unit)?,
+    ) {
+        activeDraft = d
+        txCartByProduct = emptyMap()
+        syncMessage = null
+        txItemsLoading = true
+        try {
+            val items = TxDraftApi.fetchItems(d.id)
+            txCartByProduct = items.groupBy { it.productId ?: "?" }
+            val missingMeta = txCartByProduct.keys - txProductMeta.keys
+            if (missingMeta.isNotEmpty()) {
+                txProductMeta = txProductMeta + StocktakeApi.fetchProducts(missingMeta)
+            }
+            onServerState?.invoke(items.map { it.epcHex.trim().uppercase() })
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchItems failed", e)
+            syncError = "Сагс татахад алдаа: ${e.message ?: "холболт"}"
+            activeDraft = null
+        } finally {
+            txItemsLoading = false
+        }
+    }
+
+    /** Очих салбар солино (зөвхөн transfer, submit хүртэл). */
+    fun updateTxDest(toBranch: String?) {
+        val d = activeDraft ?: return
+        viewModelScope.launch {
+            try {
+                TxDraftApi.updateDraft(d.id, toBranch, d.note)
+                activeDraft = d.copy(toBranch = toBranch)
+            } catch (e: Exception) {
+                Log.w(TAG, "updateDraft failed", e)
+                syncError = "Хадгалахад алдаа: ${e.message ?: "холболт"}"
+            }
+        }
+    }
+
+    /** Буферт хуримтлагдсан уншилтуудыг сагслана (500-аар багц, idempotent). */
+    fun txScanBuffer(hexes: List<String>, onSuccess: () -> Unit = {}) {
+        val d = activeDraft ?: return
+        if (hexes.isEmpty()) {
+            syncMessage = "Сагслах скан алга."
+            return
+        }
+        submitBusy = true
+        syncError = null
+        syncMessage = null
+        viewModelScope.launch {
+            try {
+                val counts = TxDraftApi.scan(d.id, hexes)
+                syncMessage = formatTxCounts(counts)
+                onSuccess()
+                selectTxDraftInternal(activeDraft ?: d, null)
+            } catch (e: Exception) {
+                Log.w(TAG, "txScanBuffer failed", e)
+                syncError = "Сагслахад алдаа: ${e.message ?: "холболт"} — дахин илгээхэд аюулгүй (давхардахгүй)."
+            } finally {
+                submitBusy = false
+            }
+        }
+    }
+
+    /** Нэг барааны бүх ширхгийг сагснаас хасна. */
+    fun txRemoveProduct(productId: String) {
+        val d = activeDraft ?: return
+        val ids = txCartByProduct[productId]?.map { it.epcId } ?: return
+        viewModelScope.launch {
+            try {
+                TxDraftApi.removeItems(d.id, ids)
+                selectTxDraftInternal(d, null)
+            } catch (e: Exception) {
+                Log.w(TAG, "removeItems failed", e)
+                syncError = "Хасахад алдаа: ${e.message ?: "холболт"}"
+            }
+        }
+    }
+
+    /** Сагсыг жинхэнэ гүйлгээ болгоно. Амжилтад ноорог хаагдаж жагсаалт руу буцна. */
+    fun submitTxDraft() {
+        val d = activeDraft ?: return
+        submitBusy = true
+        syncError = null
+        syncMessage = null
+        viewModelScope.launch {
+            try {
+                val r = TxDraftApi.submit(d.id)
+                val label = if (d.type == "transfer") "Шилжүүлэг" else "Актлалт"
+                syncMessage = buildString {
+                    append("$label ${r.txNumber ?: ""} үүслээ — ${r.submitted} ширхэг.")
+                    if (r.pruned > 0) append(" (${r.pruned} хүчингүй таг хасагдав.)")
+                }
+                activeDraft = null
+                txCartByProduct = emptyMap()
+                refreshTxDrafts()
+            } catch (e: Exception) {
+                Log.w(TAG, "submitTxDraft failed", e)
+                syncError = "Гүйлгээ үүсгэхэд алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                submitBusy = false
+            }
+        }
+    }
+
+    /** Ноорог цуцална (гүйлгээ үүсэхгүй; таг-уудад юу ч болоогүй). */
+    fun cancelTxDraft() {
+        val d = activeDraft ?: return
+        viewModelScope.launch {
+            try {
+                TxDraftApi.cancel(d.id)
+                activeDraft = null
+                txCartByProduct = emptyMap()
+                syncMessage = "Ноорог цуцлагдлаа."
+                refreshTxDrafts()
+            } catch (e: Exception) {
+                Log.w(TAG, "cancelTxDraft failed", e)
+                syncError = "Цуцлахад алдаа: ${e.message ?: "холболт"}"
+            }
+        }
+    }
+
+    private fun formatTxCounts(counts: Map<String, Int>): String {
+        val labels = mapOf(
+            "added" to "Сагсанд орсон",
+            "already" to "Өмнө орсон",
+            "not_active" to "Идэвхтэй биш",
+            "wrong_branch" to "Өөр салбарын",
+            "no_access" to "Эрхгүй салбар",
+            "unknown" to "Бүртгэлгүй",
+            "skipped" to "Алгассан",
+        )
+        val parts = counts.filterValues { it > 0 }
+            .map { (k, v) -> "${labels[k] ?: k}: $v" }
+        return if (parts.isEmpty()) "Шинэ скан алга." else parts.joinToString(" · ")
     }
 
     private fun formatStocktakeCounts(counts: Map<String, Int>): String {

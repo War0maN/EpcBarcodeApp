@@ -34,6 +34,8 @@ import com.epcbc.app.ui.ScanScreen
 import com.epcbc.app.ui.SearchScreen
 import com.epcbc.app.ui.StRow
 import com.epcbc.app.ui.StocktakeOverlay
+import com.epcbc.app.ui.TxCartRow
+import com.epcbc.app.ui.TxDraftOverlay
 import com.epcbc.app.ui.SettingsDialog
 import com.epcbc.app.ui.SkuDetailOverlay
 import com.epcbc.app.ui.theme.EpcBarcodeappTheme
@@ -131,7 +133,10 @@ class MainActivity : ComponentActivity() {
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
                             HomeTile("search", "🔍", "Хайлт"),
                             HomeTile("check", "✅", "Шалгалт", subtitle = "файлтай тулгах"),
-                            HomeTile("transfer", "🔄", "Шилжүүлэг", subtitle = "удахгүй", enabled = false),
+                            HomeTile("transfer", "🔄", "Шилжүүлэг",
+                                subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
+                            HomeTile("writeoff", "🗑", "Актлалт",
+                                subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
                             HomeTile("sale", "🛒", "Борлуулалт", subtitle = "удахгүй", enabled = false),
                             HomeTile("settings", "⚙️", "Тохиргоо"),
                         ),
@@ -147,6 +152,8 @@ class MainActivity : ComponentActivity() {
                                     syncViewModel.showReceiving = true
                                     if (syncViewModel.receipts.isEmpty()) syncViewModel.refreshReceipts()
                                 }
+                                "transfer" -> syncViewModel.openTxDraft("transfer")
+                                "writeoff" -> syncViewModel.openTxDraft("other")
                                 "search" -> screen = "search"
                                 "check" -> screen = "check"
                                 "settings" -> viewModel.showSettings = true
@@ -311,6 +318,63 @@ class MainActivity : ComponentActivity() {
                         },
                         onDismiss = {
                             syncViewModel.showStocktake = false
+                            syncViewModel.clearSyncMessages()
+                        },
+                    )
+                }
+
+                // Шилжүүлэг/Актлалт — ноорог-сагс, in-tree overlay (PTT товч ажиллана).
+                // Мөр = бараа (нэр × ширхэг); таг бүр серверт хадгалагддаг тул апп
+                // унтарсан ч сагс алдагдахгүй — ноорогоо дахин сонгоод үргэлжлүүлнэ.
+                if (syncViewModel.showTxDraft && loggedIn) {
+                    val txRows = syncViewModel.txCartByProduct.map { (pid, items) ->
+                        val meta = syncViewModel.txProductMeta[pid]
+                        TxCartRow(
+                            productId = pid,
+                            name = meta?.name ?: meta?.sku ?: meta?.gtin ?: pid.take(8),
+                            sku = meta?.sku,
+                            count = items.size,
+                        )
+                    }.sortedBy { it.name }
+                    TxDraftOverlay(
+                        type = syncViewModel.txType,
+                        branches = syncViewModel.txBranches,
+                        drafts = syncViewModel.txDrafts,
+                        draftsLoading = syncViewModel.txDraftsLoading,
+                        active = syncViewModel.activeDraft,
+                        itemsLoading = syncViewModel.txItemsLoading,
+                        rows = txRows,
+                        cartCount = syncViewModel.txCartCount,
+                        pendingCount = viewModel.scannedEpcs.size,
+                        submitBusy = syncViewModel.submitBusy,
+                        message = syncViewModel.syncMessage,
+                        error = syncViewModel.syncError,
+                        branchName = { syncViewModel.txBranchName(it) },
+                        onRefreshList = { syncViewModel.refreshTxDrafts() },
+                        onCreate = { toBr, note ->
+                            // Шинэ сагс = шинэ ажил: буфер цэвэрлэгдэнэ (өмнөх
+                            // ажлын уншилт хутгалдахгүй).
+                            syncViewModel.createTxDraft(toBr, note) { cartHexes ->
+                                viewModel.resetForJob(cartHexes)
+                            }
+                        },
+                        onSelect = { d ->
+                            if (d == null) syncViewModel.selectTxDraft(null)
+                            else syncViewModel.selectTxDraft(d) { cartHexes ->
+                                viewModel.resetForJob(cartHexes)
+                            }
+                        },
+                        onChangeDest = { syncViewModel.updateTxDest(it) },
+                        onScanToCart = {
+                            syncViewModel.txScanBuffer(viewModel.scannedEpcs.toList()) {
+                                viewModel.clearAfterSubmit()
+                            }
+                        },
+                        onRemoveProduct = { syncViewModel.txRemoveProduct(it) },
+                        onSubmit = { syncViewModel.submitTxDraft() },
+                        onCancelDraft = { syncViewModel.cancelTxDraft() },
+                        onDismiss = {
+                            syncViewModel.showTxDraft = false
                             syncViewModel.clearSyncMessages()
                         },
                     )
