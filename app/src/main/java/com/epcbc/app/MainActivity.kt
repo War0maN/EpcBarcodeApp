@@ -36,6 +36,7 @@ import com.epcbc.app.ui.StRow
 import com.epcbc.app.ui.StocktakeOverlay
 import com.epcbc.app.ui.TxCartRow
 import com.epcbc.app.ui.TxDraftOverlay
+import com.epcbc.app.ui.TxJobRow
 import com.epcbc.app.ui.SettingsDialog
 import com.epcbc.app.ui.SkuDetailOverlay
 import com.epcbc.app.ui.theme.EpcBarcodeappTheme
@@ -58,9 +59,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         Log.i(TAG, "MainActivity.onCreate")
 
-        // Шинэ уншилт бүрийг тооллогын амьд тулгагч руу дамжуулна (идэвхтэй
-        // тооллого сонгоогүй үед hook дотроо шууд буцдаг — зардал 0).
-        viewModel.onNewEpcs = { syncViewModel.onStocktakeScans(it) }
+        // Шинэ уншилт бүрийг тооллогын + даалгаврын амьд тулгагч руу дамжуулна
+        // (идэвхтэй ажилгүй үед hook-ууд дотроо шууд буцдаг — зардал 0).
+        viewModel.onNewEpcs = {
+            syncViewModel.onStocktakeScans(it)
+            syncViewModel.onTxDraftScans(it)
+        }
 
         // Уншигчийг АВТОМАТААР эхлүүлнэ (нүүрэнд товч байхгүй — 2026-08-02
         // дизайн): эхний frame зурагдсаны дараа, бэлэн биш үед л. Бүтэхгүй
@@ -336,6 +340,18 @@ class MainActivity : ComponentActivity() {
                             count = items.size,
                         )
                     }.sortedBy { it.name }
+                    // Даалгаврын мөрүүд: уншсан = амьд локал тоолол (сервер + шинэ
+                    // уншилт); дуусаагүй нь эхэндээ.
+                    val jobRows = syncViewModel.txLines.map { (pid, expected) ->
+                        val meta = syncViewModel.txLineMeta[pid]
+                        TxJobRow(
+                            productId = pid,
+                            name = meta?.name ?: meta?.sku ?: meta?.gtin ?: pid.take(8),
+                            sku = meta?.sku,
+                            expected = expected,
+                            picked = syncViewModel.txPickedLocal[pid] ?: 0,
+                        )
+                    }.sortedWith(compareBy({ it.picked >= it.expected }, { it.name }))
                     TxDraftOverlay(
                         type = syncViewModel.txType,
                         branches = syncViewModel.txBranches,
@@ -344,6 +360,8 @@ class MainActivity : ComponentActivity() {
                         active = syncViewModel.activeDraft,
                         itemsLoading = syncViewModel.txItemsLoading,
                         rows = txRows,
+                        jobRows = jobRows,
+                        extraLocal = syncViewModel.txExtraLocal,
                         cartCount = syncViewModel.txCartCount,
                         pendingCount = viewModel.scannedEpcs.size,
                         submitBusy = syncViewModel.submitBusy,

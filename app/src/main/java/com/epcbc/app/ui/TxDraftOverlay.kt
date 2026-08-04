@@ -48,6 +48,15 @@ data class TxCartRow(
     val count: Int,
 )
 
+/** Даалгаврын нэг мөр — амьд явцтай (уншсан/даалгасан). */
+data class TxJobRow(
+    val productId: String,
+    val name: String,
+    val sku: String?,
+    val expected: Int,
+    val picked: Int,
+)
+
 /**
  * Шилжүүлэг/Актлалтын ноорог-сагс — in-tree overlay (Dialog БИШ: PTT товч
  * Activity-д хүрнэ; Surface — dark theme-д текст зөв өнгөтэй).
@@ -64,6 +73,10 @@ fun TxDraftOverlay(
     active: TxDraftApi.Draft?,
     itemsLoading: Boolean,
     rows: List<TxCartRow>,
+    /** Даалгаврын мөрүүд (амьд явцтай). Хоосон = чөлөөт сагс. */
+    jobRows: List<TxJobRow>,
+    /** Жагсаалтад тохироогүй уншилтын тоолуур (зөвлөмж). */
+    extraLocal: Int,
     cartCount: Int,
     pendingCount: Int,
     submitBusy: Boolean,
@@ -245,6 +258,71 @@ fun TxDraftOverlay(
                     OutlinedButton(onClick = { onSelect(null) }) { Text("← Ноорогууд") }
                 }
 
+                val isJob = jobRows.isNotEmpty()
+                if (isJob) {
+                    // ---------- Даалгаврын амьд явц (жагсаалттай) ----------
+                    val planned = jobRows.sumOf { it.expected }
+                    val picked = jobRows.sumOf { it.picked }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        StStat(
+                            "Уншсан", "$picked / $planned",
+                            if (picked >= planned) Color(0xFF059669) else MaterialTheme.colorScheme.onBackground,
+                        )
+                        StStat(
+                            "Илгээгээгүй буфер", "$pendingCount",
+                            if (pendingCount > 0) Color(0xFFD97706) else MaterialTheme.colorScheme.onBackground,
+                        )
+                        StStat(
+                            "Тохирохгүй", "$extraLocal",
+                            if (extraLocal > 0) Color(0xFFD97706) else MaterialTheme.colorScheme.onBackground,
+                        )
+                    }
+                    Text(
+                        "Тулгалт төхөөрөмж дээр шууд. Жагсаалтад байхгүй / тоо гүйцсэн таг " +
+                            "сагсанд ОРОХГҮЙ — Сагслахад сервер давхар шалгана.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(6.dp))
+
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text("БАРАА", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                        Text("УНШСАН", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(96.dp))
+                    }
+                    HorizontalDivider()
+                    LazyColumn(modifier = Modifier.weight(1f)) {
+                        items(jobRows, key = { it.productId }) { r ->
+                            val done = r.picked >= r.expected
+                            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(r.name, maxLines = 2)
+                                    r.sku?.let {
+                                        Text(
+                                            it, style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                                Text(
+                                    "${r.picked} / ${r.expected}",
+                                    modifier = Modifier.width(96.dp),
+                                    color = when {
+                                        done -> Color(0xFF059669)
+                                        r.picked > 0 -> Color(0xFFD97706)
+                                        else -> MaterialTheme.colorScheme.onBackground
+                                    },
+                                    fontWeight = if (done) FontWeight.Bold else FontWeight.Normal,
+                                )
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                } else {
+                    // ---------- Чөлөөт сагс (жагсаалтгүй) ----------
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -290,6 +368,7 @@ fun TxDraftOverlay(
                         HorizontalDivider()
                     }
                 }
+                }
 
                 // Доод үйлдлүүд: гүйлгээ болгох / цуцлах — хоёул баталгаажуулалттай.
                 if (confirm == null) {
@@ -314,11 +393,18 @@ fun TxDraftOverlay(
                         )
                     }
                 } else {
+                    // Даалгаснаас дутуу байвал ил анхааруулаад л зөвшөөрнө
+                    // (2026-08-05 тохирсон: бараа олдоогүй байх нь бодит).
+                    val jobPlanned = jobRows.sumOf { it.expected }
+                    val shortfall = (jobPlanned - cartCount).coerceAtLeast(0)
                     Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         Column(Modifier.padding(12.dp)) {
                             Text(
                                 if (confirm == "submit")
-                                    "$cartCount ширхгийг ${if (isTransfer) "«${branchName(active.toBranch)}» руу шилжүүлэх" else "актлах"} уу?"
+                                    "$cartCount ширхгийг ${if (isTransfer) "«${branchName(active.toBranch)}» руу шилжүүлэх" else "актлах"} уу?" +
+                                        (if (jobRows.isNotEmpty() && shortfall > 0)
+                                            "\n⚠ Даалгаснаас $shortfall ширхэг ДУТУУ байна."
+                                        else "")
                                 else
                                     "Сагсыг цуцлах уу? (Гүйлгээ үүсэхгүй, бараанд юу ч болохгүй.)",
                                 fontWeight = FontWeight.Bold,

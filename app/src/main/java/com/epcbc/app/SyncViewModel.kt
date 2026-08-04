@@ -394,6 +394,26 @@ class SyncViewModel : ViewModel() {
     val txCartCount: Int get() = txCartByProduct.values.sumOf { it.size }
     fun txBranchName(id: String?): String? = txBranches.firstOrNull { it.id == id }?.name
 
+    // ── Даалгаврын амьд явц (Алхам 3) ──
+    // Жагсаалттай ноорогт уншсан таг бүрийг ТӨХӨӨРӨМЖ ДЭЭР шууд бараатай нь
+    // тулгана (SGTIN → GTIN-14 → MatchEngine.key; GID → object_class) —
+    // сүлжээгүй ч мөр бүрийн явц амьд. Сервер эцсийн үнэн хэвээр: Сагслахад
+    // tx_draft_scan ангилж (not_on_list/over_qty сагсанд оруулахгүй) хадгална.
+
+    /** productId → даалгасан тоо (хоосон = жагсаалтгүй чөлөөт сагс). */
+    var txLines: Map<String, Int> = emptyMap(); private set
+    /** productId → амьд уншсан тоо (сервер + локал; дэлгэц эндээс уншина). */
+    val txPickedLocal = mutableStateMapOf<String, Int>()
+    /** Даалгаврын барааны нэр/SKU. */
+    var txLineMeta: Map<String, TxDraftApi.LineProduct> = emptyMap(); private set
+    /** Жагсаалтад тохироогүй уншилт (зөвлөмжийн тоолуур — сагсанд орохгүй). */
+    var txExtraLocal by mutableStateOf(0); private set
+
+    private var txGtinToPid: Map<String, String> = emptyMap()
+    private var txClassToPid: Map<Long, String> = emptyMap()
+    /** Локал тулгалтад тооцогдсон hex-үүд (давхардал 1 л удаа). */
+    private val txSeen = HashSet<String>()
+
     /** Нүүрний нүднээс: төрөл тогтоож, жагсаалт + салбаруудыг татна. */
     fun openTxDraft(type: String) {
         txType = type
@@ -457,6 +477,13 @@ class SyncViewModel : ViewModel() {
         if (d == null) {
             activeDraft = null
             txCartByProduct = emptyMap()
+            txLines = emptyMap()
+            txPickedLocal.clear()
+            txLineMeta = emptyMap()
+            txGtinToPid = emptyMap()
+            txClassToPid = emptyMap()
+            txSeen.clear()
+            txExtraLocal = 0
             syncMessage = null
             return
         }
@@ -478,6 +505,28 @@ class SyncViewModel : ViewModel() {
             if (missingMeta.isNotEmpty()) {
                 txProductMeta = txProductMeta + StocktakeApi.fetchProducts(missingMeta)
             }
+
+            // Даалгаврын жагсаалт + локал тулгалтын түлхүүрүүд.
+            val lines = TxDraftApi.fetchLines(d.id)
+            txLines = lines.associate { it.productId to it.expected }
+            txPickedLocal.clear()
+            txSeen.clear()
+            txExtraLocal = 0
+            if (lines.isNotEmpty()) {
+                txLineMeta = TxDraftApi.fetchLineProducts(txLines.keys)
+                txGtinToPid = txLineMeta.values
+                    .filter { !it.gtin.isNullOrBlank() }
+                    .associate { com.epcbc.core.MatchEngine.key(it.gtin!!) to it.id }
+                txClassToPid = txLineMeta.values
+                    .filter { it.objectClass != null }
+                    .associate { it.objectClass!! to it.id }
+                // Серверийн явцаар суулгана; сагсан дахь hex-үүд "үзсэн"-д орно.
+                for (l in lines) txPickedLocal[l.productId] = l.picked
+                for (it2 in items) txSeen.add(it2.epcHex.trim().uppercase())
+            } else {
+                txGtinToPid = emptyMap()
+                txClassToPid = emptyMap()
+            }
             onServerState?.invoke(items.map { it.epcHex.trim().uppercase() })
         } catch (e: Exception) {
             Log.w(TAG, "fetchItems failed", e)
@@ -485,6 +534,44 @@ class SyncViewModel : ViewModel() {
             activeDraft = null
         } finally {
             txItemsLoading = false
+        }
+    }
+
+    /**
+     * Уншигчаас шинэ EPC ирэх бүрд дуудагдана (жагсаалттай даалгавар идэвхтэй
+     * үед л ажиллана — бусад үед зардал 0). SGTIN тагийг GTIN-14-өөр,
+     * GID тагийг object_class-аар нь даалгаврын мөртэй тулгана.
+     */
+    fun onTxDraftScans(hexes: List<String>) {
+        if (!showTxDraft || activeDraft == null || txLines.isEmpty() || hexes.isEmpty()) return
+        for (raw in hexes) {
+            val hex = raw.trim().uppercase()
+            if (!txSeen.add(hex)) continue
+            val pid = matchLineProduct(hex)
+            if (pid == null) {
+                txExtraLocal++
+                continue
+            }
+            val expected = txLines[pid] ?: 0
+            val cur = txPickedLocal[pid] ?: 0
+            // Даалгаснаас илүүг явцад оруулахгүй (сервер ч сагсанд оруулахгүй).
+            if (cur < expected) txPickedLocal[pid] = cur + 1
+            else txExtraLocal++
+        }
+    }
+
+    /** EPC hex → даалгаврын бараа (SGTIN=GTIN, GID=object_class); олдохгүй бол null. */
+    private fun matchLineProduct(hex: String): String? {
+        if (hex.length != 24) return null
+        return when {
+            hex.startsWith("30") -> {
+                val gtin = runCatching { com.epcbc.core.EpcDecoder.decode(hex).gtin14 }.getOrNull()
+                gtin?.let { txGtinToPid[com.epcbc.core.MatchEngine.key(it)] }
+            }
+            hex.startsWith("35") ->
+                // GID-96: 8 бит header + 28 бит manager (7 hex) + 24 бит class (6 hex).
+                runCatching { hex.substring(9, 15).toLong(16) }.getOrNull()?.let { txClassToPid[it] }
+            else -> null
         }
     }
 
@@ -593,6 +680,8 @@ class SyncViewModel : ViewModel() {
             "wrong_branch" to "Өөр салбарын",
             "no_access" to "Эрхгүй салбар",
             "unknown" to "Бүртгэлгүй",
+            "not_on_list" to "Жагсаалтад байхгүй",
+            "over_qty" to "Тоо гүйцсэн",
             "skipped" to "Алгассан",
         )
         val parts = counts.filterValues { it > 0 }

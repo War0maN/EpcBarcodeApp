@@ -135,6 +135,45 @@ object TxDraftApi {
         return out
     }
 
+    @Serializable
+    data class LineRow(
+        @SerialName("product_id") val productId: String,
+        val expected: Int,
+        val picked: Int,
+    )
+
+    /** Даалгаврын жагсаалт + серверийн явц (tx_draft_progress view). */
+    suspend fun fetchLines(draftId: String): List<LineRow> =
+        Supa.client.postgrest.from("tx_draft_progress")
+            .select(Columns.raw("product_id, expected, picked")) {
+                filter { eq("draft_id", draftId) }
+            }
+            .decodeList<LineRow>()
+
+    @Serializable
+    data class LineProduct(
+        val id: String,
+        val name: String? = null,
+        val sku: String? = null,
+        val gtin: String? = null,
+        /** GID-96 кодлолтой (баркодгүй) барааны Object Class — тагийг локал таньхад. */
+        @SerialName("object_class") val objectClass: Long? = null,
+    )
+
+    /** Даалгаврын бараанууд — нэр + локал тулгалтын түлхүүрүүд (gtin/object_class). */
+    suspend fun fetchLineProducts(ids: Collection<String>): Map<String, LineProduct> {
+        val map = HashMap<String, LineProduct>()
+        for (chunk in ids.chunked(200)) {
+            Supa.client.postgrest.from("products")
+                .select(Columns.raw("id, name, sku, gtin, object_class")) {
+                    filter { isIn("id", chunk) }
+                }
+                .decodeList<LineProduct>()
+                .forEach { map[it.id] = it }
+        }
+        return map
+    }
+
     /** Сагснаас хасна (epc_id-аар). Сагс хоосорвол салбарын түгжээ тайлагдана. */
     suspend fun removeItems(draftId: String, epcIds: List<String>) {
         for (chunk in epcIds.chunked(500)) {
