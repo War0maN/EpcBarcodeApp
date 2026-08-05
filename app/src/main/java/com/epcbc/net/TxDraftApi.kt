@@ -1,5 +1,6 @@
 package com.epcbc.net
 
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
@@ -35,6 +36,21 @@ object TxDraftApi {
             .decodeList<Branch>()
 
     @Serializable
+    private data class UserBranchRow(@SerialName("branch_id") val branchId: String)
+
+    /**
+     * Өөрийн хуваарилагдсан салбарууд (user_branches). Хоосон = хуваарилалтгүй
+     * буюу "бүх салбар" семантик (вебтэй ижил).
+     */
+    suspend fun listMyBranchIds(): List<String> {
+        val uid = Supa.client.auth.currentUserOrNull()?.id ?: return emptyList()
+        return Supa.client.postgrest.from("user_branches")
+            .select(Columns.raw("branch_id")) { filter { eq("user_id", uid) } }
+            .decodeList<UserBranchRow>()
+            .map { it.branchId }
+    }
+
+    @Serializable
     data class Draft(
         val id: String,
         val type: String, // transfer | other
@@ -57,14 +73,20 @@ object TxDraftApi {
             }
             .decodeList<Draft>()
 
-    /** Шинэ ноорог үүсгэнэ (эрхийн шалгалт RPC дотор). */
-    suspend fun createDraft(type: String, toBranch: String?, note: String?): String {
+    /**
+     * Шинэ ноорог үүсгэнэ (эрхийн шалгалт RPC дотор). [fromBranch] өгвөл эх
+     * салбар эхнээсээ түгжигдэнэ (from_locked) — өөр салбарын төөрсөн таг
+     * анх уншигдаад сагсыг буруу салбараар түгжих эрсдэлгүй; null бол хуучин
+     * зан төлөв (эхний тагаар тогтоно).
+     */
+    suspend fun createDraft(type: String, toBranch: String?, note: String?, fromBranch: String? = null): String {
         val result = Supa.client.postgrest.rpc(
             "create_tx_draft",
             buildJsonObject {
                 put("p_type", type)
                 if (toBranch != null) put("p_to_branch", toBranch) else put("p_to_branch", null as String?)
                 put("p_note", note)
+                if (fromBranch != null) put("p_from_branch", fromBranch)
             }
         )
         return Json.parseToJsonElement(result.data).jsonPrimitive.content

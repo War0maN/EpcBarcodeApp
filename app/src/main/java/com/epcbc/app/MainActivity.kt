@@ -413,6 +413,7 @@ class MainActivity : ComponentActivity() {
                     TxDraftOverlay(
                         type = syncViewModel.txType,
                         branches = syncViewModel.txBranches,
+                        myBranches = syncViewModel.txMyBranches,
                         drafts = syncViewModel.txDrafts,
                         draftsLoading = syncViewModel.txDraftsLoading,
                         active = syncViewModel.activeDraft,
@@ -427,10 +428,10 @@ class MainActivity : ComponentActivity() {
                         error = syncViewModel.syncError,
                         branchName = { syncViewModel.txBranchName(it) },
                         onRefreshList = { syncViewModel.refreshTxDrafts() },
-                        onCreate = { toBr, note ->
+                        onCreate = { fromBr, toBr, note ->
                             // Шинэ сагс = шинэ ажил: буфер цэвэрлэгдэнэ (өмнөх
                             // ажлын уншилт хутгалдахгүй).
-                            syncViewModel.createTxDraft(toBr, note) { cartHexes ->
+                            syncViewModel.createTxDraft(fromBr, toBr, note) { cartHexes ->
                                 viewModel.resetForJob(cartHexes)
                             }
                         },

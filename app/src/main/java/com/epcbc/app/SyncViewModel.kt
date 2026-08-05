@@ -527,6 +527,20 @@ class SyncViewModel : ViewModel() {
     val txCartCount: Int get() = txCartByProduct.values.sumOf { it.size }
     fun txBranchName(id: String?): String? = txBranches.firstOrNull { it.id == id }?.name
 
+    /** Өөрийн хуваарилагдсан салбарын id-ууд (null = хараахан татаагүй). */
+    var txMyBranchIds by mutableStateOf<Set<String>?>(null); private set
+
+    /**
+     * Эх салбараар сонгож болох жагсаалт: хуваарилалттай бол зөвхөн өөрийнх,
+     * хуваарилалтгүй (эсвэл татаж чадаагүй) бол бүх салбар — вебийн
+     * "мөргүй = бүх салбар" семантиктай ижил.
+     */
+    val txMyBranches: List<TxDraftApi.Branch>
+        get() {
+            val ids = txMyBranchIds
+            return if (ids.isNullOrEmpty()) txBranches else txBranches.filter { it.id in ids }
+        }
+
     // ── Даалгаврын амьд явц (Алхам 3) ──
     // Жагсаалттай ноорогт уншсан таг бүрийг ТӨХӨӨРӨМЖ ДЭЭР шууд бараатай нь
     // тулгана (SGTIN → GTIN-14 → MatchEngine.key; GID → object_class) —
@@ -563,6 +577,17 @@ class SyncViewModel : ViewModel() {
                 }
             }
         }
+        if (txMyBranchIds == null) {
+            viewModelScope.launch {
+                try {
+                    txMyBranchIds = TxDraftApi.listMyBranchIds().toSet()
+                } catch (e: Exception) {
+                    // Татаж чадаагүй бол null хэвээр → бүх салбар харагдана;
+                    // эрхгүй салбар сонговол сервер өөрөө татгалзана.
+                    Log.w(TAG, "listMyBranchIds failed", e)
+                }
+            }
+        }
     }
 
     fun refreshTxDrafts() {
@@ -580,15 +605,20 @@ class SyncViewModel : ViewModel() {
         }
     }
 
-    /** Шинэ сагс үүсгээд шууд идэвхжүүлнэ. */
-    fun createTxDraft(toBranch: String?, note: String?, onServerState: ((List<String>) -> Unit)? = null) {
+    /** Шинэ сагс үүсгээд шууд идэвхжүүлнэ. [fromBranch] өгвөл эх салбар эхнээсээ түгжигдэнэ. */
+    fun createTxDraft(
+        fromBranch: String?,
+        toBranch: String?,
+        note: String?,
+        onServerState: ((List<String>) -> Unit)? = null,
+    ) {
         submitBusy = true
         syncError = null
         viewModelScope.launch {
             try {
-                val id = TxDraftApi.createDraft(txType, toBranch, note)
+                val id = TxDraftApi.createDraft(txType, toBranch, note, fromBranch)
                 val d = TxDraftApi.Draft(
-                    id = id, type = txType, toBranch = toBranch, note = note,
+                    id = id, type = txType, fromBranch = fromBranch, toBranch = toBranch, note = note,
                     status = "open", createdAt = "",
                 )
                 selectTxDraftInternal(d, onServerState)

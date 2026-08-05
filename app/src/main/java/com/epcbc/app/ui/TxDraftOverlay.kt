@@ -64,10 +64,15 @@ data class TxJobRow(
  * Сонгосон үед: сагсны байдал (бараагаар) + Сагслах / Гүйлгээ болгох / Цуцлах.
  * Таг бүр СЕРВЕРТ хадгалагддаг тул апп унтарсан ч сагс алдагдахгүй.
  */
+/** "Эхний тагаар тогтооно" гэсэн ил сонголтын sentinel (Салбаргүй бараанд хэрэгтэй). */
+private const val FROM_AUTO = "__auto__"
+
 @Composable
 fun TxDraftOverlay(
     type: String, // transfer | other
     branches: List<TxDraftApi.Branch>,
+    /** Эх салбараар сонгож болох жагсаалт (өөрийн хандах эрхтэй салбарууд). */
+    myBranches: List<TxDraftApi.Branch>,
     drafts: List<TxDraftApi.Draft>,
     draftsLoading: Boolean,
     active: TxDraftApi.Draft?,
@@ -84,7 +89,7 @@ fun TxDraftOverlay(
     error: String?,
     branchName: (String?) -> String?,
     onRefreshList: () -> Unit,
-    onCreate: (toBranch: String?, note: String?) -> Unit,
+    onCreate: (fromBranch: String?, toBranch: String?, note: String?) -> Unit,
     onSelect: (TxDraftApi.Draft?) -> Unit,
     onChangeDest: (String) -> Unit,
     onScanToCart: () -> Unit,
@@ -140,10 +145,47 @@ fun TxDraftOverlay(
                 var toBranch by rememberSaveable { mutableStateOf<String?>(null) }
                 var note by rememberSaveable { mutableStateOf("") }
                 var destMenuOpen by remember { mutableStateOf(false) }
+                var fromMenuOpen by remember { mutableStateOf(false) }
+
+                // Эх салбар: ганц хандах салбартай бол автоматаар түгжинэ (алхам
+                // нэмэгдэхгүй); олон бол ЗААВАЛ сонгуулна — өөр салбарын төөрсөн
+                // таг анх уншигдаад сагсыг буруу түгжих эрсдэлээс сэргийлнэ.
+                // "Эхний тагаар" гэдэг ил сонголт Салбаргүй барааны замыг хадгална.
+                var fromSel by rememberSaveable { mutableStateOf<String?>(null) }
+                val effFrom = fromSel ?: myBranches.singleOrNull()?.id
+                val fromChosen = effFrom != null || myBranches.isEmpty()
+                val fromLabel = when (effFrom) {
+                    null -> "сонгоно уу"
+                    FROM_AUTO -> "эхний тагаар"
+                    else -> branchName(effFrom) ?: "сонгоно уу"
+                }
 
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Text("Шинэ сагс", fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Box {
+                            OutlinedButton(onClick = { fromMenuOpen = true }) {
+                                Text("Эх салбар: $fromLabel ▾")
+                            }
+                            DropdownMenu(expanded = fromMenuOpen, onDismissRequest = { fromMenuOpen = false }) {
+                                myBranches.forEach { b ->
+                                    DropdownMenuItem(
+                                        text = { Text(b.name) },
+                                        onClick = {
+                                            fromSel = b.id
+                                            // Очих = эх байж болохгүй — давхцвал арилгана.
+                                            if (toBranch == b.id) toBranch = null
+                                            fromMenuOpen = false
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("Эхний тагаар тогтооно") },
+                                    onClick = { fromSel = FROM_AUTO; fromMenuOpen = false },
+                                )
+                            }
+                        }
                         Spacer(Modifier.height(6.dp))
                         if (isTransfer) {
                             Box {
@@ -151,7 +193,7 @@ fun TxDraftOverlay(
                                     Text("Очих салбар: ${branchName(toBranch) ?: "сонгоно уу"} ▾")
                                 }
                                 DropdownMenu(expanded = destMenuOpen, onDismissRequest = { destMenuOpen = false }) {
-                                    branches.forEach { b ->
+                                    branches.filter { it.id != effFrom }.forEach { b ->
                                         DropdownMenuItem(
                                             text = { Text(b.name) },
                                             onClick = { toBranch = b.id; destMenuOpen = false },
@@ -189,8 +231,14 @@ fun TxDraftOverlay(
                         }
                         Spacer(Modifier.height(8.dp))
                         Button(
-                            onClick = { onCreate(toBranch, note.trim().ifEmpty { null }) },
-                            enabled = !submitBusy && when (type) {
+                            onClick = {
+                                onCreate(
+                                    effFrom?.takeIf { it != FROM_AUTO },
+                                    toBranch,
+                                    note.trim().ifEmpty { null },
+                                )
+                            },
+                            enabled = !submitBusy && fromChosen && when (type) {
                                 "transfer" -> toBranch != null
                                 "other" -> note.trim().isNotEmpty()
                                 else -> true
