@@ -365,7 +365,9 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
      * startScan(allowRecover=false) хоёр давхар хамгаална.
      */
     private var recovering = false
-    private fun recoverReaderAndRetry() {
+    /** Уншигчийг сэргээж, амжилттай бол [onRecovered]-ыг дуудна (ердийн скан
+     *  ч, Олох ч ижил сэргээлтийг хуваалцана). */
+    private fun recoverReader(onRecovered: () -> Unit) {
         if (recovering) return
         recovering = true
         statusMessage = "Уншигч алдагдсан — дахин холбож байна…"
@@ -378,7 +380,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                 readerReady = false
                 initReader() // init + callback + power + drain timer бүгд дахин
                 if (readerReady) {
-                    startScan(allowRecover = false)
+                    onRecovered()
                 } else {
                     statusMessage = "Уншигч сэргэсэнгүй — UHF ашигладаг өөр аппыг хааж, УНШИГЧ ЭХЛҮҮЛЭХ дар."
                 }
@@ -387,8 +389,15 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Hardware trigger (C5 PTT) pressed. Mirrors the old onKeyDown semantics. */
+    private fun recoverReaderAndRetry() = recoverReader { startScan(allowRecover = false) }
+
+    /** Hardware trigger (C5 PTT) pressed. Mirrors the old onKeyDown semantics.
+     *  Олох цонх нээлттэй үед гох = Эхлэх/Зогсоох toggle (2026-08-05). */
     fun onTriggerDown() {
+        if (showFinder) {
+            if (finderActive) stopFinder() else startFinder()
+            return
+        }
         if (!readerReady) return
         if (continuousMode) {
             if (isScanning) stopScan() else startScan()
@@ -601,7 +610,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ── Tag finder ───────────────────────────────────────────────────────
-    fun startFinder() {
+    fun startFinder(allowRecover: Boolean = true) {
         val target = finderTargetEpc.trim().uppercase()
         Log.i(TAG, "startFinder: target='$target' reader=$reader readerReady=$readerReady isScanning=$isScanning")
         if (target.isBlank()) {
@@ -630,8 +639,15 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
                 if (ok) {
                     isScanning = true
                     statusMessage = "Уншиж байна... (Tag finder)"
+                } else if (allowRecover) {
+                    // Өөр апп (AppCenter UHF г.м.) модулийг эзэмшээд буцахад
+                    // handle үхмэл болж start false буцдаг — ердийн скантай
+                    // ижил free+init хийгээд нэг удаа дахин оролдоно.
+                    finderMessage = "Уншигч алдагдсан — дахин холбож байна…"
+                    recoverReader { startFinder(allowRecover = false) }
+                    return
                 } else {
-                    finderMessage = "АЛДАА: scan эхлүүлж чадсангүй"
+                    finderMessage = "АЛДАА: scan эхлүүлж чадсангүй — UHF ашигладаг өөр аппыг хаагаад дахин оролдоно уу."
                     return
                 }
             } else {

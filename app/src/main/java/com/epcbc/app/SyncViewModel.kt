@@ -126,7 +126,9 @@ class SyncViewModel : ViewModel() {
             receipts = emptyList()
             progress = emptyList()
             selectStocktake(null)
+            selectHistoryStocktake(null)
             stocktakes = emptyList()
+            stClosed = emptyList()
             showStocktake = false
             selectTxDraft(null)
             txDrafts = emptyList()
@@ -257,6 +259,96 @@ class SyncViewModel : ViewModel() {
                 syncError = "Тооллогын жагсаалт татахад алдаа: ${e.message ?: "холболт"}"
             } finally {
                 stocktakesLoading = false
+            }
+        }
+    }
+
+    // ── Тооллого ЭХЛҮҮЛЭХ (2026-08-05 — вебтэй ижил урсгал төхөөрөмж дээр) ──
+    var stBranches by mutableStateOf<List<TxDraftApi.Branch>>(emptyList()); private set
+    var stCreateBusy by mutableStateOf(false); private set
+
+    fun loadStBranches() {
+        if (stBranches.isNotEmpty()) return
+        viewModelScope.launch {
+            try {
+                stBranches = TxDraftApi.listBranches()
+            } catch (e: Exception) {
+                Log.w(TAG, "listBranches failed", e)
+            }
+        }
+    }
+
+    /** Шинэ тооллого үүсгээд ШУУД идэвхжүүлнэ (ажилтан цааш тоолоод явна). */
+    fun createStocktake(branchId: String, note: String?, onServerState: ((List<String>) -> Unit)? = null) {
+        // Найрсаг урьдчилсан шалгалт (вебтэй ижил) — сервер ямар ч байсан хориглоно.
+        val open = stocktakes.firstOrNull { it.status == "open" && it.branchName == stBranches.firstOrNull { b -> b.id == branchId }?.name }
+        if (open != null) {
+            syncError = "Энэ салбарт нээлттэй тооллого (${open.number}) байна — эхлээд түүнийгээ хаана уу."
+            return
+        }
+        stCreateBusy = true
+        syncError = null
+        viewModelScope.launch {
+            try {
+                val id = StocktakeApi.createStocktake(branchId, note?.trim()?.ifEmpty { null })
+                refreshStocktakes()
+                val st = StocktakeApi.fetchStocktake(id)
+                syncMessage = "Тооллого ${st.number} эхэллээ."
+                selectStocktake(st, onServerState)
+            } catch (e: Exception) {
+                Log.w(TAG, "createStocktake failed", e)
+                syncError = "Тооллого эхлүүлэхэд алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                stCreateBusy = false
+            }
+        }
+    }
+
+    // ── Тооллогын ТҮҮХ (хаагдсан ажлууд — зөвхөн харах) ──
+    // Түүхэнд snapshot-ын таг бүрийг ТАТАХГҮЙ (тэр нь л хүнд) — зөвхөн
+    // бараагаар нэгтгэсэн явц + Илүүгийн тоо. Апп гацахгүй.
+    var stClosed by mutableStateOf<List<StocktakeApi.Stocktake>>(emptyList()); private set
+    var stClosedLoading by mutableStateOf(false); private set
+    var stHistory by mutableStateOf<StocktakeApi.Stocktake?>(null); private set
+    var stHistoryLoading by mutableStateOf(false); private set
+    var stHistoryProgress by mutableStateOf<List<StocktakeApi.ProgressRow>>(emptyList()); private set
+    var stHistoryMeta by mutableStateOf<Map<String, StocktakeApi.ProductInfo>>(emptyMap()); private set
+    var stHistoryExtra by mutableStateOf(0L); private set
+
+    fun refreshClosedStocktakes() {
+        stClosedLoading = true
+        syncError = null
+        viewModelScope.launch {
+            try {
+                stClosed = StocktakeApi.listClosedStocktakes()
+            } catch (e: Exception) {
+                Log.w(TAG, "listClosedStocktakes failed", e)
+                syncError = "Түүх татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                stClosedLoading = false
+            }
+        }
+    }
+
+    fun selectHistoryStocktake(st: StocktakeApi.Stocktake?) {
+        stHistory = st
+        stHistoryProgress = emptyList()
+        stHistoryMeta = emptyMap()
+        stHistoryExtra = 0
+        if (st == null) return
+        stHistoryLoading = true
+        viewModelScope.launch {
+            try {
+                val rows = StocktakeApi.fetchProgress(st.id)
+                stHistoryProgress = rows
+                stHistoryMeta = StocktakeApi.fetchProducts(rows.map { it.productId }.toSet())
+                stHistoryExtra = StocktakeApi.countExtras(st.id)
+            } catch (e: Exception) {
+                Log.w(TAG, "history load failed", e)
+                syncError = "Түүх татахад алдаа: ${e.message ?: "холболт"}"
+                stHistory = null
+            } finally {
+                stHistoryLoading = false
             }
         }
     }

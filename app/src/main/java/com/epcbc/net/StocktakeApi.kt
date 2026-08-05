@@ -34,19 +34,64 @@ object StocktakeApi {
         val status: String,
         val note: String? = null,
         @SerialName("created_at") val createdAt: String,
+        @SerialName("closed_at") val closedAt: String? = null,
         val branches: BranchInfo? = null,
     ) {
         val branchName: String get() = branches?.name ?: "?"
     }
 
+    private const val ST_COLS = "id, number, status, note, created_at, closed_at, branches(name)"
+
     /** Нээлттэй (скан хүлээж буй) тооллогууд. */
     suspend fun listOpenStocktakes(): List<Stocktake> =
         Supa.client.postgrest.from("stocktakes")
-            .select(Columns.raw("id, number, status, note, created_at, branches(name)")) {
+            .select(Columns.raw(ST_COLS)) {
                 filter { eq("status", "open") }
                 order("created_at", Order.DESCENDING)
             }
             .decodeList<Stocktake>()
+
+    /** Хаагдсан тооллогууд (түүх) — сүүлийнх нь эхэндээ, хязгаартай. */
+    suspend fun listClosedStocktakes(limit: Long = 30): List<Stocktake> =
+        Supa.client.postgrest.from("stocktakes")
+            .select(Columns.raw(ST_COLS)) {
+                filter { eq("status", "closed") }
+                order("closed_at", Order.DESCENDING)
+                limit(limit)
+            }
+            .decodeList<Stocktake>()
+
+    /** Нэг тооллого (шинээр үүсгэснийг шууд идэвхжүүлэхэд). */
+    suspend fun fetchStocktake(id: String): Stocktake =
+        Supa.client.postgrest.from("stocktakes")
+            .select(Columns.raw(ST_COLS)) { filter { eq("id", id) } }
+            .decodeSingle<Stocktake>()
+
+    /** Шинэ тооллого эхлүүлнэ (вебтэй ижил RPC — ST дугаар, snapshot,
+     *  "нэг салбарт нэг нээлттэй" шалгалт бүгд DB талд). */
+    suspend fun createStocktake(branchId: String, note: String?): String {
+        val result = Supa.client.postgrest.rpc(
+            "create_stocktake",
+            buildJsonObject {
+                put("p_branch", branchId)
+                put("p_note", note)
+            }
+        )
+        return Json.parseToJsonElement(result.data).jsonPrimitive.content
+    }
+
+    /** Хаагдсан тооллогын "Илүү" тоо (мөр татахгүй — зөвхөн тоолно). */
+    suspend fun countExtras(stocktakeId: String): Long =
+        Supa.client.postgrest.from("stocktake_scans")
+            .select(Columns.raw("epc_hex")) {
+                filter {
+                    eq("stocktake_id", stocktakeId)
+                    eq("outcome", "not_expected")
+                }
+                count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                limit(1)
+            }
+            .countOrNull() ?: 0
 
     @Serializable
     data class ItemRow(

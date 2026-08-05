@@ -200,10 +200,9 @@ fun TxDraftOverlay(
                 }
                 Spacer(Modifier.height(10.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onRefreshList, enabled = !draftsLoading) {
-                        Text(if (draftsLoading) "Татаж байна…" else "↻ Сэргээх")
-                    }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Spacer(Modifier.weight(1f))
+                    OutlinedButton(onClick = onRefreshList, enabled = !draftsLoading) { Text("↻") }
                 }
                 if (drafts.isEmpty() && !draftsLoading) {
                     Text("Нээлттэй ноорог алга.", modifier = Modifier.padding(top = 12.dp))
@@ -274,13 +273,14 @@ fun TxDraftOverlay(
                 }
 
                 Row(
-                    Modifier.padding(vertical = 6.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Button(onClick = onScanToCart, enabled = !submitBusy && pendingCount > 0) {
                         Text(if (submitBusy) "Илгээж байна…" else "🧺 Сагслах ($pendingCount)")
                     }
-                    OutlinedButton(onClick = { onSelect(null) }) { Text("← Ноорогууд") }
+                    OutlinedButton(onClick = { onSelect(null) }) { Text("Буцах") }
                 }
 
                 val isJob = jobRows.isNotEmpty()

@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
                             when (key) {
                                 "stocktake" -> {
                                     syncViewModel.showStocktake = true
+                                    syncViewModel.loadStBranches()
                                     if (syncViewModel.stocktakes.isEmpty()) syncViewModel.refreshStocktakes()
                                 }
                                 "receiving" -> {
@@ -286,6 +287,17 @@ class MainActivity : ComponentActivity() {
                             ),
                         )
                     }.sortedWith(compareBy({ it.found >= it.expected }, { it.name }))
+                    // Түүхийн мөрүүд (хаагдсан тооллого — зөвхөн харах)
+                    val stHistoryRows = syncViewModel.stHistoryProgress.map { r ->
+                        val meta = syncViewModel.stHistoryMeta[r.productId]
+                        StRow(
+                            productId = r.productId,
+                            name = meta?.name ?: meta?.sku ?: meta?.gtin ?: r.productId.take(8),
+                            sku = meta?.sku,
+                            expected = r.expected,
+                            found = r.found,
+                        )
+                    }.sortedWith(compareBy({ it.found >= it.expected }, { it.name }))
                     StocktakeOverlay(
                         stocktakes = syncViewModel.stocktakes,
                         stocktakesLoading = syncViewModel.stocktakesLoading,
@@ -298,7 +310,24 @@ class MainActivity : ComponentActivity() {
                         progressLoading = syncViewModel.progressLoading,
                         message = syncViewModel.syncMessage,
                         error = syncViewModel.syncError,
+                        branches = syncViewModel.stBranches,
+                        createBusy = syncViewModel.stCreateBusy,
+                        closed = syncViewModel.stClosed,
+                        closedLoading = syncViewModel.stClosedLoading,
+                        history = syncViewModel.stHistory,
+                        historyRows = stHistoryRows,
+                        historyExtra = syncViewModel.stHistoryExtra,
+                        historyLoading = syncViewModel.stHistoryLoading,
                         onRefreshList = { syncViewModel.refreshStocktakes() },
+                        onCreate = { branchId, note ->
+                            // Шинэ тооллогод буфер цэвэрлэгдэнэ (өмнөх ажлын
+                            // уншилт хутгалдахгүй).
+                            syncViewModel.createStocktake(branchId, note) { serverSeen ->
+                                viewModel.resetForJob(serverSeen)
+                            }
+                        },
+                        onRefreshClosed = { syncViewModel.refreshClosedStocktakes() },
+                        onSelectHistory = { syncViewModel.selectHistoryStocktake(it) },
                         onSelect = { st ->
                             // Сонгоход серверийн өмнөх байдал татагдаж, буфер шинэ
                             // ажилдаа цэвэрлэгдэнэ (өмнөх ажлын уншилт хутгалдахгүй).

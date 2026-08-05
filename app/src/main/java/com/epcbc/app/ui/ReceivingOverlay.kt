@@ -102,10 +102,10 @@ fun ReceivingOverlay(
                 val shown = if (branchFilter == null) receipts
                             else receipts.filter { it.branchName == branchFilter }
 
-                Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onRefreshReceipts, enabled = !receiptsLoading) {
-                        Text(if (receiptsLoading) "Татаж байна…" else "↻ Сэргээх")
-                    }
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     if (branches.size > 1) {
                         Box {
                             OutlinedButton(onClick = { branchMenuOpen = true }) {
@@ -121,6 +121,8 @@ fun ReceivingOverlay(
                             }
                         }
                     }
+                    Spacer(Modifier.weight(1f))
+                    OutlinedButton(onClick = onRefreshReceipts, enabled = !receiptsLoading) { Text("↻") }
                 }
                 if (receipts.isEmpty() && !receiptsLoading) {
                     Text(
@@ -154,18 +156,16 @@ fun ReceivingOverlay(
             } else {
                 // ---------- Сонгосон ажлын явц + илгээх ----------
                 Row(
-                    Modifier.padding(vertical = 6.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Button(onClick = onSubmit, enabled = !submitBusy && scannedCount > 0) {
                         Text(if (submitBusy) "Илгээж байна…" else "⬆ Илгээх ($scannedCount)")
                     }
-                    OutlinedButton(onClick = onRefreshProgress, enabled = !progressLoading) {
-                        Text("↻ Явц")
-                    }
-                    OutlinedButton(onClick = { onSelect(null) }) {
-                        Text("← Ажлууд")
-                    }
+                    OutlinedButton(onClick = { onSelect(null) }) { Text("Буцах") }
+                    Spacer(Modifier.weight(1f))
+                    OutlinedButton(onClick = onRefreshProgress, enabled = !progressLoading) { Text("↻") }
                 }
                 Text(
                     "Скан хийгээд \"Илгээх\" дарна — давхардсан илгээлт аюулгүй (сервер алгасна).",
