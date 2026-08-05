@@ -651,6 +651,94 @@ class SyncViewModel : ViewModel() {
         }
     }
 
+    // ── Шат 4: Ирж буй шилжүүлэг (хэсэгчлэн хүлээн авах) ──
+    var incomingTxs by mutableStateOf<List<TxDraftApi.TxRow>>(emptyList()); private set
+    var incomingLoading by mutableStateOf(false); private set
+    var activeIncoming by mutableStateOf<TxDraftApi.TxRow?>(null); private set
+    /** productId → (нийт, ирсэн). */
+    var incomingProgress by mutableStateOf<Map<String, Pair<Int, Int>>>(emptyMap()); private set
+    var incomingItemsLoading by mutableStateOf(false); private set
+
+    fun refreshIncoming() {
+        incomingLoading = true
+        syncError = null
+        viewModelScope.launch {
+            try {
+                incomingTxs = TxDraftApi.listIncoming()
+            } catch (e: Exception) {
+                Log.w(TAG, "listIncoming failed", e)
+                syncError = "Ирж буй шилжүүлэг татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                incomingLoading = false
+            }
+        }
+    }
+
+    /**
+     * Ирж буй шилжүүлэг сонгож явцыг нь татна. [onServerState]-д аль хэдийн
+     * ХҮЛЭЭН АВАГДСАН тагийн hex-үүд очно — дахин уншигдвал буферт орохгүй.
+     */
+    fun selectIncoming(t: TxDraftApi.TxRow?, onServerState: ((List<String>) -> Unit)? = null) {
+        activeIncoming = t
+        incomingProgress = emptyMap()
+        syncMessage = null
+        if (t == null) return
+        incomingItemsLoading = true
+        viewModelScope.launch {
+            try {
+                loadIncomingProgress(t.id, onServerState)
+            } catch (e: Exception) {
+                Log.w(TAG, "selectIncoming failed", e)
+                syncError = "Шилжүүлгийн явц татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                incomingItemsLoading = false
+            }
+        }
+    }
+
+    private suspend fun loadIncomingProgress(txId: String, onServerState: ((List<String>) -> Unit)?) {
+        val items = TxDraftApi.fetchTxItems(txId)
+        val byProduct = items.groupBy { it.productId ?: "?" }
+        val missingMeta = byProduct.keys - txProductMeta.keys
+        if (missingMeta.isNotEmpty()) {
+            txProductMeta = txProductMeta + StocktakeApi.fetchProducts(missingMeta)
+        }
+        incomingProgress = byProduct.mapValues { (_, rows) ->
+            rows.size to rows.count { it.receivedAt != null }
+        }
+        onServerState?.invoke(items.filter { it.receivedAt != null }.mapNotNull { it.epcHex })
+    }
+
+    /** Уншсан буферийг серверт илгээж хүлээн авна; явц шинэчлэгдэнэ. */
+    fun submitReceiveScan(hexes: List<String>, onSuccess: (() -> Unit)? = null) {
+        val t = activeIncoming ?: return
+        if (hexes.isEmpty()) return
+        submitBusy = true
+        syncError = null
+        viewModelScope.launch {
+            try {
+                val c = TxDraftApi.receiveScan(t.id, hexes)
+                val parts = mutableListOf("Ирсэн: ${c["received"] ?: 0}")
+                (c["already"] ?: 0).takeIf { it > 0 }?.let { parts.add("өмнө ирсэн: $it") }
+                (c["not_in_tx"] ?: 0).takeIf { it > 0 }?.let { parts.add("энэ шилжүүлгийнх биш: $it") }
+                (c["unknown"] ?: 0).takeIf { it > 0 }?.let { parts.add("бүртгэлгүй: $it") }
+                (c["skipped"] ?: 0).takeIf { it > 0 }?.let { parts.add("алгассан: $it") }
+                val remaining = c["remaining"] ?: -1
+                syncMessage = parts.joinToString(" · ") +
+                    if (remaining == 0) " — БҮГД ИРЛЭЭ, гүйлгээ хаагдлаа ✅"
+                    else " · үлдсэн: $remaining"
+                onSuccess?.invoke()
+                loadIncomingProgress(t.id, null)
+                if (remaining == 0) refreshIncoming()
+            } catch (e: Exception) {
+                Log.w(TAG, "receiveScan failed", e)
+                syncError = "Хүлээн авахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                submitBusy = false
+            }
+        }
+    }
+
     /** Нүүрний нүднээс: төрөл тогтоож, жагсаалт + салбаруудыг татна. */
     fun openTxDraft(type: String) {
         txType = type
@@ -660,6 +748,9 @@ class SyncViewModel : ViewModel() {
         txHistory = emptyList()
         txHistoryDetail = null
         txHistoryItems = emptyMap()
+        activeIncoming = null
+        incomingTxs = emptyList()
+        incomingProgress = emptyMap()
         refreshTxDrafts()
         if (txBranches.isEmpty()) {
             viewModelScope.launch {

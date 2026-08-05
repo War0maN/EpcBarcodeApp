@@ -261,11 +261,20 @@ object TxDraftApi {
             .decodeList<TxRow>()
 
     @Serializable
+    data class TxItemEpc(
+        @SerialName("product_id") val productId: String? = null,
+        @SerialName("epc_hex") val epcHex: String? = null,
+    )
+
+    @Serializable
     data class TxItemRow(
         @SerialName("epc_id") val epcId: String,
-        @SerialName("epc_codes") val epc: EpcRef? = null,
+        /** Шат 4: мөр хэзээ хүлээн авагдсан (null = замд яваа). */
+        @SerialName("received_at") val receivedAt: String? = null,
+        @SerialName("epc_codes") val epc: TxItemEpc? = null,
     ) {
         val productId: String? get() = epc?.productId
+        val epcHex: String? get() = epc?.epcHex
     }
 
     /** Гүйлгээний мөрүүд (бараагаар бүлэглэхэд) — 1000-аар хуудаслана. */
@@ -275,7 +284,7 @@ object TxDraftApi {
         var from = 0L
         while (true) {
             val chunk = Supa.client.postgrest.from("transaction_items")
-                .select(Columns.raw("epc_id, epc_codes(product_id)")) {
+                .select(Columns.raw("epc_id, received_at, epc_codes(product_id, epc_hex)")) {
                     filter { eq("transaction_id", txId) }
                     order("epc_id", Order.ASCENDING)
                     range(from, from + page - 1)
@@ -286,5 +295,46 @@ object TxDraftApi {
             from += page
         }
         return out
+    }
+
+    // ── Шат 4: Ирж буй шилжүүлгийг хэсэгчлэн хүлээн авах ──
+
+    /** Хүлээгдэж буй шилжүүлгүүд (RLS: очих салбарт нь эрхтэй хүнд харагдана). */
+    suspend fun listIncoming(): List<TxRow> =
+        Supa.client.postgrest.from("transactions")
+            .select(Columns.raw("id, tx_number, status, from_branch, to_branch, note, created_at")) {
+                filter {
+                    eq("type", "transfer")
+                    eq("status", "pending")
+                }
+                order("created_at", Order.DESCENDING)
+                limit(50)
+            }
+            .decodeList<TxRow>()
+
+    /**
+     * Уншсан hex-үүдийг 500-аар багцалж хүлээн авна (receive_transfer_scan).
+     * Idempotent — дахин илгээхэд 'already'. Буцаана: received/already/
+     * not_in_tx/unknown/skipped/remaining тоолуурууд.
+     */
+    suspend fun receiveScan(txId: String, hexes: List<String>): Map<String, Int> {
+        val total = mutableMapOf<String, Int>()
+        for (chunk in hexes.chunked(500)) {
+            val result = Supa.client.postgrest.rpc(
+                "receive_transfer_scan",
+                buildJsonObject {
+                    put("p_tx", txId)
+                    put("p_hexes", buildJsonArray { chunk.forEach { add(it) } })
+                }
+            )
+            val counts = Json.parseToJsonElement(result.data).jsonObject
+            for ((k, v) in counts) {
+                // 'status' нь текст утга — тоон талбаруудыг л нэгтгэнэ
+                // (remaining нь сүүлийн багцын утгаараа дарагдана).
+                val n = v.jsonPrimitive.intOrNull ?: continue
+                total[k] = if (k == "remaining") n else (total[k] ?: 0) + n
+            }
+        }
+        return total
     }
 }

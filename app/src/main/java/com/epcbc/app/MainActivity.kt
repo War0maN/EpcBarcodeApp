@@ -427,6 +427,17 @@ class MainActivity : ComponentActivity() {
                             count = count,
                         )
                     }.sortedBy { it.name }
+                    // Ирж буй шилжүүлгийн явц: бараа x/N — дутуу нь дээрээ.
+                    val incomingRows = syncViewModel.incomingProgress.map { (pid, p) ->
+                        val meta = syncViewModel.txProductMeta[pid]
+                        TxJobRow(
+                            productId = pid,
+                            name = meta?.name ?: meta?.sku ?: pid.take(8),
+                            sku = meta?.sku,
+                            expected = p.first,
+                            picked = p.second,
+                        )
+                    }.sortedWith(compareBy({ it.picked >= it.expected }, { it.name }))
                     TxDraftOverlay(
                         type = syncViewModel.txType,
                         branches = syncViewModel.txBranches,
@@ -449,6 +460,11 @@ class MainActivity : ComponentActivity() {
                         historyDetail = syncViewModel.txHistoryDetail,
                         historyRows = txHistoryRows,
                         historyItemsLoading = syncViewModel.txHistoryItemsLoading,
+                        incoming = syncViewModel.incomingTxs,
+                        incomingLoading = syncViewModel.incomingLoading,
+                        activeIncoming = syncViewModel.activeIncoming,
+                        incomingRows = incomingRows,
+                        incomingItemsLoading = syncViewModel.incomingItemsLoading,
                         onRefreshList = { syncViewModel.refreshTxDrafts() },
                         onCreate = { fromBr, toBr, note ->
                             // Шинэ сагс = шинэ ажил: буфер цэвэрлэгдэнэ (өмнөх
@@ -474,6 +490,20 @@ class MainActivity : ComponentActivity() {
                         onCancelDraft = { syncViewModel.cancelTxDraft() },
                         onRefreshHistory = { syncViewModel.refreshTxHistory() },
                         onSelectHistory = { syncViewModel.selectTxHistory(it) },
+                        onRefreshIncoming = { syncViewModel.refreshIncoming() },
+                        onSelectIncoming = { t ->
+                            // Хүлээн авалт = шинэ ажил: буфер цэвэрлэгдэж, аль
+                            // хэдийн ирсэн таг дахин уншигдвал буферт орохгүй.
+                            if (t == null) syncViewModel.selectIncoming(null)
+                            else syncViewModel.selectIncoming(t) { receivedHexes ->
+                                viewModel.resetForJob(receivedHexes)
+                            }
+                        },
+                        onReceiveScan = {
+                            syncViewModel.submitReceiveScan(viewModel.scannedEpcs.toList()) {
+                                viewModel.clearAfterSubmit()
+                            }
+                        },
                         onDismiss = {
                             syncViewModel.showTxDraft = false
                             syncViewModel.clearSyncMessages()

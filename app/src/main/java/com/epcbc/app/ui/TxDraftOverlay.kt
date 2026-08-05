@@ -106,6 +106,13 @@ fun TxDraftOverlay(
     /** Түүхийн дэлгэрэнгүй — бараагаар бүлэглэсэн мөрүүд. */
     historyRows: List<TxCartRow>,
     historyItemsLoading: Boolean,
+    /** Шат 4: ирж буй (pending) шилжүүлгүүд — зөвхөн transfer нүдэнд. */
+    incoming: List<TxDraftApi.TxRow>,
+    incomingLoading: Boolean,
+    activeIncoming: TxDraftApi.TxRow?,
+    /** Хүлээн авалтын явц — бараагаар (expected=нийт, picked=ирсэн). */
+    incomingRows: List<TxJobRow>,
+    incomingItemsLoading: Boolean,
     onRefreshList: () -> Unit,
     onCreate: (fromBranch: String?, toBranch: String?, note: String?) -> Unit,
     onSelect: (TxDraftApi.Draft?) -> Unit,
@@ -116,6 +123,9 @@ fun TxDraftOverlay(
     onCancelDraft: () -> Unit,
     onRefreshHistory: () -> Unit,
     onSelectHistory: (TxDraftApi.TxRow?) -> Unit,
+    onRefreshIncoming: () -> Unit,
+    onSelectIncoming: (TxDraftApi.TxRow?) -> Unit,
+    onReceiveScan: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val isTransfer = type == "transfer"
@@ -135,13 +145,14 @@ fun TxDraftOverlay(
             confirm != null -> confirm = null
             active != null -> onSelect(null)
             historyDetail != null -> onSelectHistory(null)
+            activeIncoming != null -> onSelectIncoming(null)
             mode != "menu" -> mode = "menu"
             else -> onDismiss()
         }
     }
     BackHandler(onBack = goBack)
 
-    val atMenu = active == null && historyDetail == null && mode == "menu"
+    val atMenu = active == null && historyDetail == null && activeIncoming == null && mode == "menu"
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -156,9 +167,11 @@ fun TxDraftOverlay(
             val headerTitle = when {
                 active != null -> "$title — сагс"
                 historyDetail != null -> historyDetail.txNumber ?: "$title — түүх"
+                activeIncoming != null -> "${activeIncoming.txNumber ?: "?"} хүлээн авах"
                 mode == "create" -> "Шинэ сагс"
                 mode == "open" -> "Нээлттэй сагсууд"
                 mode == "history" -> "$title — түүх"
+                mode == "incoming" -> "Ирж буй шилжүүлэг"
                 else -> title
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -254,6 +267,82 @@ fun TxDraftOverlay(
                     }
                 }
 
+                // ---------- Шат 4: Ирж буй шилжүүлгийг хүлээн авах ----------
+                activeIncoming != null -> {
+                    if (incomingItemsLoading) {
+                        Text("Явц татаж байна…", modifier = Modifier.padding(top = 16.dp))
+                    } else {
+                        val total = incomingRows.sumOf { it.expected }
+                        val received = incomingRows.sumOf { it.picked }
+                        Text(
+                            "${branchName(activeIncoming.fromBranch) ?: "Салбаргүй"} → ${branchName(activeIncoming.toBranch) ?: "?"}" +
+                                (activeIncoming.note?.let { " · $it" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Button(onClick = onReceiveScan, enabled = !submitBusy && pendingCount > 0) {
+                                Text(if (submitBusy) "Илгээж байна…" else "📥 Хүлээн авах ($pendingCount)")
+                            }
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            StStat(
+                                "Ирсэн", "$received / $total",
+                                if (received >= total) TX_GREEN else TX_ORANGE,
+                            )
+                            StStat(
+                                "Илгээгээгүй буфер", "$pendingCount",
+                                if (pendingCount > 0) TX_ORANGE else MaterialTheme.colorScheme.onBackground,
+                            )
+                        }
+                        Text(
+                            "Таг уншаад «Хүлээн авах» дарна — ирсэн нь энэ салбарт Идэвхтэй " +
+                                "болно. Дутуу нь ЗАМД хэвээр үлдэж, дараа нэмж хүлээн авах эсвэл " +
+                                "цуцлахад эх салбартаа буцна.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Text("БАРАА", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                            Text("ИРСЭН", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(96.dp))
+                        }
+                        HorizontalDivider()
+                        LazyColumn(modifier = Modifier.weight(1f)) {
+                            items(incomingRows, key = { it.productId }) { r ->
+                                val done = r.picked >= r.expected
+                                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(r.name, maxLines = 2)
+                                        r.sku?.takeIf { it != r.name }?.let {
+                                            Text(
+                                                it, style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        "${r.picked} / ${r.expected}",
+                                        modifier = Modifier.width(96.dp),
+                                        color = when {
+                                            done -> TX_GREEN
+                                            r.picked > 0 -> TX_ORANGE
+                                            else -> MaterialTheme.colorScheme.onBackground
+                                        },
+                                        fontWeight = if (done) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                }
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                }
+
                 // ---------- Цэс ----------
                 mode == "menu" -> {
                     Spacer(Modifier.height(4.dp))
@@ -269,6 +358,13 @@ fun TxDraftOverlay(
                     MenuCard("🧺", "Нээлттэй сагсууд", "Эхэлсэн сагсаа үргэлжлүүлж уншина") {
                         mode = "open"
                         onRefreshList()
+                    }
+                    if (isTransfer) {
+                        // Шат 4: очих салбар дээр ирсэн ачааг уншиж хүлээн авна.
+                        MenuCard("📥", "Ирж буй шилжүүлэг", "Ирсэн ачааг уншиж хүлээн авна") {
+                            mode = "incoming"
+                            onRefreshIncoming()
+                        }
                     }
                     MenuCard("🕘", "Түүх", "Хийгдсэн гүйлгээнүүд (сүүлийн 30)") {
                         mode = "history"
@@ -416,6 +512,50 @@ fun TxDraftOverlay(
                                         )
                                     }
                                     d.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ---------- Ирж буй шилжүүлгийн жагсаалт ----------
+                mode == "incoming" -> {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Spacer(Modifier.weight(1f))
+                        OutlinedButton(onClick = onRefreshIncoming, enabled = !incomingLoading) { Text("↻") }
+                    }
+                    if (incoming.isEmpty() && !incomingLoading) {
+                        Text("Хүлээгдэж буй шилжүүлэг алга.", modifier = Modifier.padding(top = 12.dp))
+                    }
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(incoming, key = { it.id }) { t ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelectIncoming(t) },
+                            ) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Row {
+                                        Text(
+                                            t.txNumber ?: "—",
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Text(t.createdAt.take(10), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Text(
+                                        "${branchName(t.fromBranch) ?: "Салбаргүй"} → ${branchName(t.toBranch) ?: "?"}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                    t.note?.let {
+                                        Text(
+                                            it, style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                             }
                         }
