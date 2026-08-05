@@ -80,6 +80,62 @@ object StocktakeApi {
         return Json.parseToJsonElement(result.data).jsonPrimitive.content
     }
 
+    @Serializable
+    data class ExtraScan(
+        @SerialName("epc_hex") val epcHex: String,
+        @SerialName("epc_id") val epcId: String? = null,
+        @SerialName("product_id") val productId: String? = null,
+        /** Скан хийх ҮЕИЙН төлөв/салбар (хөлдсөн); хуучин датад null. */
+        @SerialName("scan_status") val scanStatus: String? = null,
+        @SerialName("scan_branch") val scanBranch: String? = null,
+    )
+
+    /** "Илүү" уншилтууд (зөвхөн бүртгэлтэй EPC — unknown энд ОРДОГГҮЙ,
+     *  сервер тусад нь ангилдаг). Яагаад илүү болохыг төлөв/салбар нь хэлнэ. */
+    suspend fun fetchExtraScans(stocktakeId: String): List<ExtraScan> {
+        val out = ArrayList<ExtraScan>()
+        val page = 1000
+        var from = 0L
+        while (true) {
+            val chunk = Supa.client.postgrest.from("stocktake_scans")
+                .select(Columns.raw("epc_hex, epc_id, product_id, scan_status, scan_branch")) {
+                    filter {
+                        eq("stocktake_id", stocktakeId)
+                        eq("outcome", "not_expected")
+                    }
+                    order("epc_hex", Order.ASCENDING)
+                    range(from, from + page - 1)
+                }
+                .decodeList<ExtraScan>()
+            out.addAll(chunk)
+            if (chunk.size < page) break
+            from += page
+        }
+        return out
+    }
+
+    @Serializable
+    data class EpcInfo(
+        val id: String,
+        val status: String,
+        @SerialName("branch_id") val branchId: String? = null,
+        @SerialName("product_id") val productId: String,
+    )
+
+    /** EPC-ийн одоогийн төлөв/салбар (scan_status null хуучин датад fallback). */
+    suspend fun fetchEpcInfo(ids: Collection<String>): Map<String, EpcInfo> {
+        val map = HashMap<String, EpcInfo>()
+        for (chunk in ids.chunked(200)) {
+            Supa.client.postgrest.from("epc_codes")
+                .select(Columns.raw("id, status, branch_id, product_id")) {
+                    filter { isIn("id", chunk) }
+                }
+                .decodeList<EpcInfo>()
+                .forEach { map[it.id] = it }
+        }
+        return map
+    }
+
     /** Хаагдсан тооллогын "Илүү" тоо (мөр татахгүй — зөвхөн тоолно). */
     suspend fun countExtras(stocktakeId: String): Long =
         Supa.client.postgrest.from("stocktake_scans")

@@ -286,7 +286,28 @@ class MainActivity : ComponentActivity() {
                                 syncViewModel.stFoundServer[pid] ?: 0,
                             ),
                         )
-                    }.sortedWith(compareBy({ it.found >= it.expected }, { it.name }))
+                    }.sortedWith(
+                        // Огт тоологдоогүй нь ДЭЭРЭЭ (хайхад амар), дараа нь
+                        // дутуу, бүрэн тоологдсон нь хамгийн доороо (2026-08-05).
+                        compareBy({ it.found >= it.expected }, { it.found > 0 }, { it.name })
+                    )
+                    // "Илүү"-гийн дэлгэрэнгүй мөрүүд (бүртгэлтэй EPC-үүд л)
+                    val stExtraRows = syncViewModel.stExtrasScans.map { sc ->
+                        val epc = sc.epcId?.let { syncViewModel.stExtrasEpc[it] }
+                        val pid = sc.productId ?: epc?.productId
+                        val meta = pid?.let {
+                            syncViewModel.stProductMeta[it] ?: syncViewModel.stExtrasMeta[it]
+                        }
+                        com.epcbc.app.ui.StExtraRow(
+                            epcHex = sc.epcHex,
+                            name = meta?.name ?: meta?.sku ?: meta?.gtin ?: "?",
+                            sku = meta?.sku,
+                            status = sc.scanStatus ?: epc?.status,
+                            branchName = (sc.scanBranch ?: epc?.branchId)?.let { id ->
+                                syncViewModel.stBranches.firstOrNull { it.id == id }?.name
+                            },
+                        )
+                    }
                     // Түүхийн мөрүүд (хаагдсан тооллого — зөвхөн харах)
                     val stHistoryRows = syncViewModel.stHistoryProgress.map { r ->
                         val meta = syncViewModel.stHistoryMeta[r.productId]
@@ -297,14 +318,16 @@ class MainActivity : ComponentActivity() {
                             expected = r.expected,
                             found = r.found,
                         )
-                    }.sortedWith(compareBy({ it.found >= it.expected }, { it.name }))
+                    }.sortedWith(compareBy({ it.found >= it.expected }, { it.found > 0 }, { it.name }))
                     StocktakeOverlay(
                         stocktakes = syncViewModel.stocktakes,
                         stocktakesLoading = syncViewModel.stocktakesLoading,
                         active = syncViewModel.activeStocktake,
                         expectedLoading = syncViewModel.stExpectedLoading,
                         rows = stRows,
-                        extraLocal = syncViewModel.stExtraLocal,
+                        extraServer = syncViewModel.stExtraServer,
+                        extras = stExtraRows,
+                        extrasLoading = syncViewModel.stExtrasLoading,
                         pendingCount = viewModel.scannedEpcs.size,
                         submitBusy = syncViewModel.submitBusy,
                         progressLoading = syncViewModel.progressLoading,
@@ -319,6 +342,7 @@ class MainActivity : ComponentActivity() {
                         historyExtra = syncViewModel.stHistoryExtra,
                         historyLoading = syncViewModel.stHistoryLoading,
                         onRefreshList = { syncViewModel.refreshStocktakes() },
+                        onLoadExtras = { syncViewModel.loadStocktakeExtras() },
                         onCreate = { branchId, note ->
                             // Шинэ тооллогод буфер цэвэрлэгдэнэ (өмнөх ажлын
                             // уншилт хутгалдахгүй).

@@ -243,10 +243,40 @@ class SyncViewModel : ViewModel() {
     private val stSeenLocal = HashSet<String>()
     /** productId → локал олдсон тоо (амьд, мөр бүр эндээс уншина). */
     val stFoundLocal = mutableStateMapOf<String, Int>()
-    /** Snapshot-д байхгүй уншилтын тоо (илүү/танигдаагүй байж магадгүй). */
-    var stExtraLocal by mutableStateOf(0); private set
+    /** "Илүү" — СЕРВЕРИЙН ангилалаар (not_expected = бүртгэлтэй ч snapshot-д
+     *  байхгүй EPC; бүртгэлгүй unknown ЭНД ОРОХГҮЙ — вебтэй ижил семантик).
+     *  Тооллого сонгоход өмнөх байдлаас, Илгээх бүрд шинэчлэгдэнэ. */
+    var stExtraServer by mutableStateOf(0); private set
     /** productId → серверийн found (Явц татахад; дэлгэц max(локал, сервер)). */
     val stFoundServer = mutableStateMapOf<String, Int>()
+
+    // "Илүү"-гийн дэлгэрэнгүй (дарж харах — вебийн Илүү модалтай ижил)
+    var stExtrasLoading by mutableStateOf(false); private set
+    var stExtrasScans by mutableStateOf<List<StocktakeApi.ExtraScan>>(emptyList()); private set
+    var stExtrasEpc by mutableStateOf<Map<String, StocktakeApi.EpcInfo>>(emptyMap()); private set
+    var stExtrasMeta by mutableStateOf<Map<String, StocktakeApi.ProductInfo>>(emptyMap()); private set
+
+    fun loadStocktakeExtras() {
+        val st = activeStocktake ?: return
+        stExtrasLoading = true
+        viewModelScope.launch {
+            try {
+                val scans = StocktakeApi.fetchExtraScans(st.id)
+                // Хуучин (хөлдөөгүй) сканд одоогийн төлөв/салбараар нөхнө.
+                val needEpc = scans.filter { it.scanStatus == null && it.epcId != null }.mapNotNull { it.epcId }
+                val epcMap = if (needEpc.isEmpty()) emptyMap() else StocktakeApi.fetchEpcInfo(needEpc)
+                val pids = (scans.mapNotNull { it.productId } + epcMap.values.map { it.productId }).toSet()
+                stExtrasMeta = if (pids.isEmpty()) emptyMap() else StocktakeApi.fetchProducts(pids)
+                stExtrasEpc = epcMap
+                stExtrasScans = scans
+            } catch (e: Exception) {
+                Log.w(TAG, "loadStocktakeExtras failed", e)
+                syncError = "Илүүгийн жагсаалт татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                stExtrasLoading = false
+            }
+        }
+    }
 
     fun refreshStocktakes() {
         stocktakesLoading = true
@@ -371,7 +401,10 @@ class SyncViewModel : ViewModel() {
         stSeenLocal.clear()
         stFoundLocal.clear()
         stFoundServer.clear()
-        stExtraLocal = 0
+        stExtraServer = 0
+        stExtrasScans = emptyList()
+        stExtrasEpc = emptyMap()
+        stExtrasMeta = emptyMap()
         syncMessage = null
         if (st == null) return
         stExpectedLoading = true
@@ -392,7 +425,8 @@ class SyncViewModel : ViewModel() {
                 val scanned = StocktakeApi.fetchScannedHexes(st.id)
                 for (s in scanned) {
                     stSeenLocal.add(s.epcHex.trim().uppercase())
-                    if (s.outcome != "found") stExtraLocal++
+                    // Зөвхөн not_expected = Илүү; unknown (бүртгэлгүй) тоолохгүй.
+                    if (s.outcome == "not_expected") stExtraServer++
                 }
                 onServerState?.invoke(scanned.map { it.epcHex.trim().uppercase() })
             } catch (e: Exception) {
@@ -417,7 +451,9 @@ class SyncViewModel : ViewModel() {
             if (!stSeenLocal.add(hex)) continue
             val prod = stExpectedByHex[hex]
             if (prod != null) stFoundLocal[prod] = (stFoundLocal[prod] ?: 0) + 1
-            else stExtraLocal++
+            // Snapshot-д байхгүй уншилтыг ЭНД тоолохгүй — бүртгэлтэй эсэхийг
+            // сервер л мэднэ; Илгээх үед not_expected гэж ангилагдвал
+            // stExtraServer нэмэгдэнэ (вебтэй ижил семантик).
         }
     }
 
@@ -451,6 +487,8 @@ class SyncViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val counts = StocktakeApi.submitScans(st.id, hexes)
+                // Шинээр илэрсэн "Илүү"-г серверийн ангиллаас нэмнэ.
+                stExtraServer += counts["not_expected"] ?: 0
                 syncMessage = formatStocktakeCounts(counts)
                 onSuccess()
                 val rows = StocktakeApi.fetchProgress(st.id)

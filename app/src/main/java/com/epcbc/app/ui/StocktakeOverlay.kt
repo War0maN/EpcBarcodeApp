@@ -51,15 +51,29 @@ data class StRow(
     val found: Int,
 )
 
+/** "Илүү"-гийн нэг мөр — яагаад илүү болохыг төлөв/салбар нь тайлбарлана. */
+data class StExtraRow(
+    val epcHex: String,
+    val name: String,
+    val sku: String?,
+    val status: String?,
+    val branchName: String?,
+)
+
+/** EPC төлөвийн Монгол нэр (вебийн epcStatus-тай ижил). */
+internal val ST_STATUS_LABEL = mapOf(
+    "unprinted" to "Хэвлээгүй",
+    "active" to "Идэвхтэй",
+    "sold" to "Борлуулсан",
+    "transferring" to "Шилжүүлж буй",
+    "other" to "Бусад гүйлгээ",
+)
+
 /**
  * Тооллогын overlay — Dialog БИШ, in-tree Surface (PTT товч Activity-д хүрнэ).
- * Бүтэц (2026-08-05 хэрэглэгчтэй тохирсон, вебтэй ижил логик):
- *   Цэс: [Тооллого эхлүүлэх] [Нээлттэй ажлууд] [Тооллогын түүх]
- *   Эхлүүлэх: салбар + тэмдэглэл (нэг салбарт нэг нээлттэй — найрсаг сануулга)
- *   Түүх: хаагдсан ажлууд — зөвхөн бараагаар нэгтгэсэн явц + Илүү тоо
- *   (snapshot-ын таг бүрийг ТАТАХГҮЙ тул хүнд биш).
- * Товчны дүрэм: буцах үйлдэл = "Буцах"; refresh = зөвхөн ↻ тэмдэг, мөрийн
- * ХАМГИЙН АРД; бүх товч нэг өндөртэй.
+ * Навигаци (2026-08-05): толгойд ГАНЦ товч — цэсэнд "Хаах" (overlay хаана),
+ * дэд дэлгэцүүдэд "Буцах" (зөвхөн НЭГ алхам ухарна; шууд нүүр рүү үсрэхгүй).
+ * Түүх/Илүү: таг бүрийн жагсаалт ТАТАХГҮЙ — зөвхөн нэгтгэл (гацахгүй).
  */
 @Composable
 fun StocktakeOverlay(
@@ -68,7 +82,9 @@ fun StocktakeOverlay(
     active: StocktakeApi.Stocktake?,
     expectedLoading: Boolean,
     rows: List<StRow>,
-    extraLocal: Int,
+    extraServer: Int,
+    extras: List<StExtraRow>,
+    extrasLoading: Boolean,
     pendingCount: Int,
     submitBusy: Boolean,
     progressLoading: Boolean,
@@ -87,23 +103,29 @@ fun StocktakeOverlay(
     onRefreshProgress: () -> Unit,
     onSubmit: () -> Unit,
     onFindMissing: (productId: String) -> Unit,
+    onLoadExtras: () -> Unit,
     onCreate: (branchId: String, note: String?) -> Unit,
     onRefreshClosed: () -> Unit,
     onSelectHistory: (StocktakeApi.Stocktake?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Дотоод дэлгэц: menu | create | open | history (идэвхтэй ажил/түүхийн
-    // дэлгэрэнгүй нь active/history төлвөөр давамгайлна).
     var mode by rememberSaveable { mutableStateOf("menu") }
+    // Идэвхтэй тооллогын "Илүү" дэлгэрэнгүй нээлттэй эсэх.
+    var extrasOpen by rememberSaveable { mutableStateOf(false) }
 
-    BackHandler(onBack = {
+    /** Нэг алхам ухрах — толгойн "Буцах" ба төхөөрөмжийн Back хоёул үүгээр. */
+    val goBack: () -> Unit = {
         when {
+            extrasOpen -> extrasOpen = false
             active != null -> onSelect(null)
             history != null -> onSelectHistory(null)
             mode != "menu" -> mode = "menu"
             else -> onDismiss()
         }
-    })
+    }
+    BackHandler(onBack = goBack)
+
+    val atMenu = active == null && history == null && mode == "menu"
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -114,8 +136,9 @@ fun StocktakeOverlay(
                 .padding(12.dp)
         ) {
             val title = when {
-                active != null -> "Тооллого: ${active.number} · ${active.branchName}"
-                history != null -> "Түүх: ${history.number} · ${history.branchName}"
+                extrasOpen -> "Илүү — $extraServer"
+                active != null -> "${active.number} · ${active.branchName}"
+                history != null -> "${history.number} · ${history.branchName}"
                 mode == "create" -> "Тооллого эхлүүлэх"
                 mode == "open" -> "Нээлттэй ажлууд"
                 mode == "history" -> "Тооллогын түүх"
@@ -128,36 +151,83 @@ fun StocktakeOverlay(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onDismiss) { Text("Хаах") }
+                if (atMenu) {
+                    TextButton(onClick = onDismiss) { Text("Хаах") }
+                } else {
+                    TextButton(onClick = goBack) { Text("Буцах") }
+                }
             }
 
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
 
             when {
-                // ---------- Идэвхтэй тооллого (амьд явц + илгээх) ----------
+                // ---------- "Илүү"-гийн дэлгэрэнгүй ----------
+                extrasOpen -> {
+                    if (extrasLoading) {
+                        Text("Илүүгийн жагсаалт татаж байна…", modifier = Modifier.padding(top = 16.dp))
+                    } else if (extras.isEmpty()) {
+                        Text("Илүү уншилт алга.", modifier = Modifier.padding(top = 16.dp))
+                    } else {
+                        Text(
+                            "Бүртгэлтэй ч энэ тооллогын жагсаалтад байгаагүй таг — төлөв/салбар нь шалтгааныг хэлнэ.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        LazyColumn {
+                            items(extras, key = { it.epcHex }) { e ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(e.name, maxLines = 2)
+                                        Text(
+                                            listOfNotNull(e.sku, "…" + e.epcHex.takeLast(6)).joinToString(" · "),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            ST_STATUS_LABEL[e.status] ?: e.status ?: "?",
+                                            color = Color(0xFFD97706),
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                        e.branchName?.let {
+                                            Text(it, style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                }
+
+                // ---------- Идэвхтэй тооллого ----------
                 active != null -> {
                     if (expectedLoading) {
                         Text("Тооллогын жагсаалт татаж байна…", modifier = Modifier.padding(top = 16.dp))
                     } else {
                         ActiveStocktake(
-                            rows = rows, extraLocal = extraLocal, pendingCount = pendingCount,
+                            rows = rows, extraServer = extraServer, pendingCount = pendingCount,
                             submitBusy = submitBusy, progressLoading = progressLoading,
                             onSubmit = onSubmit, onFindMissing = onFindMissing,
-                            onBack = { onSelect(null) }, onRefreshProgress = onRefreshProgress,
+                            onRefreshProgress = onRefreshProgress,
+                            onExtrasClick = {
+                                extrasOpen = true
+                                onLoadExtras()
+                            },
                         )
                     }
                 }
 
-                // ---------- Түүхийн дэлгэрэнгүй (зөвхөн харах) ----------
+                // ---------- Түүхийн дэлгэрэнгүй ----------
                 history != null -> {
                     if (historyLoading) {
                         Text("Түүх татаж байна…", modifier = Modifier.padding(top = 16.dp))
                     } else {
-                        HistoryDetail(
-                            st = history, rows = historyRows, extra = historyExtra,
-                            onBack = { onSelectHistory(null) },
-                        )
+                        HistoryDetail(st = history, rows = historyRows, extra = historyExtra)
                     }
                 }
 
@@ -213,22 +283,19 @@ fun StocktakeOverlay(
                     Text(
                         "Эхлүүлэх мөчид салбарын бүртгэл хөлдөж (snapshot), тоолж дуустал " +
                             "өөрчлөгдөхгүй. Нэг салбарт нэг л нээлттэй тооллого байна.",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                branchId?.let {
-                                    onCreate(it, note.trim().ifEmpty { null })
-                                    mode = "open"
-                                }
-                            },
-                            enabled = !createBusy && branchId != null,
-                        ) { Text(if (createBusy) "Эхлүүлж байна…" else "Эхлүүлэх") }
-                        OutlinedButton(onClick = { mode = "menu" }) { Text("Буцах") }
-                    }
+                    Button(
+                        onClick = {
+                            branchId?.let {
+                                onCreate(it, note.trim().ifEmpty { null })
+                                mode = "open"
+                            }
+                        },
+                        enabled = !createBusy && branchId != null,
+                    ) { Text(if (createBusy) "Эхлүүлж байна…" else "Эхлүүлэх") }
                 }
 
                 // ---------- Нээлттэй ажлууд ----------
@@ -244,7 +311,6 @@ fun StocktakeOverlay(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        OutlinedButton(onClick = { mode = "menu" }) { Text("Буцах") }
                         if (listBranches.size > 1) {
                             Box {
                                 OutlinedButton(onClick = { branchMenuOpen = true }) {
@@ -273,14 +339,13 @@ fun StocktakeOverlay(
                     }
                 }
 
-                // ---------- Түүх (хаагдсан ажлууд) ----------
+                // ---------- Түүх ----------
                 else -> {
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        OutlinedButton(onClick = { mode = "menu" }) { Text("Буцах") }
                         Spacer(Modifier.weight(1f))
                         OutlinedButton(onClick = onRefreshClosed, enabled = !closedLoading) { Text("↻") }
                     }
@@ -343,18 +408,18 @@ private fun StCard(
     }
 }
 
-/** Идэвхтэй тооллогын амьд явц + илгээх (өмнөх дэлгэц, товчнууд шинэ дүрмээр). */
+/** Идэвхтэй тооллогын амьд явц + илгээх. */
 @Composable
 private fun ActiveStocktake(
     rows: List<StRow>,
-    extraLocal: Int,
+    extraServer: Int,
     pendingCount: Int,
     submitBusy: Boolean,
     progressLoading: Boolean,
     onSubmit: () -> Unit,
     onFindMissing: (String) -> Unit,
-    onBack: () -> Unit,
     onRefreshProgress: () -> Unit,
+    onExtrasClick: () -> Unit,
 ) {
     val totalExpected = rows.sumOf { it.expected }
     val totalFound = rows.sumOf { it.found }
@@ -368,25 +433,40 @@ private fun ActiveStocktake(
         Button(onClick = onSubmit, enabled = !submitBusy && pendingCount > 0) {
             Text(if (submitBusy) "Илгээж байна…" else "⬆ Илгээх ($pendingCount)")
         }
-        OutlinedButton(onClick = onBack) { Text("Буцах") }
         Spacer(Modifier.weight(1f))
         OutlinedButton(onClick = onRefreshProgress, enabled = !progressLoading) { Text("↻") }
     }
 
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         StStat("Тоологдсон", "$totalFound / $totalExpected",
             if (totalFound >= totalExpected) Color(0xFF059669) else MaterialTheme.colorScheme.onBackground)
         StStat("Дутуу", "$missing", if (missing > 0) Color(0xFFDC2626) else Color(0xFF059669))
-        StStat("Жагсаалтад байхгүй", "$extraLocal",
-            if (extraLocal > 0) Color(0xFFD97706) else MaterialTheme.colorScheme.onBackground)
+        // Илүү = серверийн ангилал (бүртгэлгүй таг орохгүй). Дарж дэлгэрэнгүй.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.clickable { onExtrasClick() },
+        ) {
+            Text(
+                "$extraServer",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (extraServer > 0) Color(0xFFD97706) else MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                "Илүү " + if (extraServer > 0) "▸" else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
     Text(
         "Тулгалт төхөөрөмж дээр шууд. Илгээх хүртэл сервер лүү юу ч бичигдэхгүй; " +
             "давхардсан илгээлт аюулгүй (сервер алгасна).",
-        style = MaterialTheme.typography.bodySmall,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Spacer(Modifier.height(6.dp))
 
@@ -431,20 +511,13 @@ private fun HistoryDetail(
     st: StocktakeApi.Stocktake,
     rows: List<StRow>,
     extra: Long,
-    onBack: () -> Unit,
 ) {
     val totalExpected = rows.sumOf { it.expected }
     val totalFound = rows.sumOf { it.found }
     val missing = (totalExpected - totalFound).coerceAtLeast(0)
 
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedButton(onClick = onBack) { Text("Буцах") }
-    }
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         StStat("Тоологдсон", "$totalFound / $totalExpected",
@@ -453,7 +526,7 @@ private fun HistoryDetail(
         StStat("Илүү", "$extra", if (extra > 0) Color(0xFFD97706) else MaterialTheme.colorScheme.onBackground)
     }
     st.note?.let {
-        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     Spacer(Modifier.height(6.dp))
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -484,12 +557,12 @@ private fun HistoryDetail(
     }
 }
 
-/** Нэг тоон статистик (Тооллого + Шилжүүлэг/Актлалтын overlay хуваалцана). */
+/** Нэг тоон статистик — ГОЛ тоо том, тайлбар жижиг (2026-08-05 дүрэм). */
 @Composable
 internal fun StStat(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
-        Text(label, style = MaterialTheme.typography.labelSmall,
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = color)
+        Text(label, style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
