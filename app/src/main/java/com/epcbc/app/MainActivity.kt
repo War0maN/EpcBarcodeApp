@@ -253,9 +253,16 @@ class MainActivity : ComponentActivity() {
                         scannedCount = viewModel.scannedEpcs.size,
                         message = syncViewModel.syncMessage,
                         error = syncViewModel.syncError,
+                        closed = syncViewModel.rcvClosed,
+                        closedLoading = syncViewModel.rcvClosedLoading,
+                        history = syncViewModel.rcvHistory,
+                        historyProgress = syncViewModel.rcvHistoryProgress,
+                        historyLoading = syncViewModel.rcvHistoryLoading,
                         onRefreshReceipts = { syncViewModel.refreshReceipts() },
                         onSelect = { syncViewModel.selectReceipt(it) },
                         onRefreshProgress = { syncViewModel.refreshProgress() },
+                        onRefreshClosed = { syncViewModel.refreshClosedReceipts() },
+                        onSelectHistory = { syncViewModel.selectHistoryReceipt(it) },
                         onSubmit = {
                             // Амжилттай илгээгдмэгц илгээх буфер 0 болно (fix: тоолуур
                             // хэвээр үлдэж "дахин илгээх үү?" гэсэн төөрөгдөл үүсгэдэг байсан).
@@ -410,6 +417,16 @@ class MainActivity : ComponentActivity() {
                             picked = syncViewModel.txPickedLocal[pid] ?: 0,
                         )
                     }.sortedWith(compareBy({ it.picked >= it.expected }, { it.name }))
+                    // Түүхийн дэлгэрэнгүй: бараагаар бүлэглэсэн мөрүүд.
+                    val txHistoryRows = syncViewModel.txHistoryItems.map { (pid, count) ->
+                        val meta = syncViewModel.txProductMeta[pid]
+                        TxCartRow(
+                            productId = pid,
+                            name = meta?.name ?: meta?.sku ?: pid.take(8),
+                            sku = meta?.sku,
+                            count = count,
+                        )
+                    }.sortedBy { it.name }
                     TxDraftOverlay(
                         type = syncViewModel.txType,
                         branches = syncViewModel.txBranches,
@@ -427,6 +444,11 @@ class MainActivity : ComponentActivity() {
                         message = syncViewModel.syncMessage,
                         error = syncViewModel.syncError,
                         branchName = { syncViewModel.txBranchName(it) },
+                        history = syncViewModel.txHistory,
+                        historyLoading = syncViewModel.txHistoryLoading,
+                        historyDetail = syncViewModel.txHistoryDetail,
+                        historyRows = txHistoryRows,
+                        historyItemsLoading = syncViewModel.txHistoryItemsLoading,
                         onRefreshList = { syncViewModel.refreshTxDrafts() },
                         onCreate = { fromBr, toBr, note ->
                             // Шинэ сагс = шинэ ажил: буфер цэвэрлэгдэнэ (өмнөх
@@ -450,6 +472,8 @@ class MainActivity : ComponentActivity() {
                         onRemoveProduct = { syncViewModel.txRemoveProduct(it) },
                         onSubmit = { syncViewModel.submitTxDraft() },
                         onCancelDraft = { syncViewModel.cancelTxDraft() },
+                        onRefreshHistory = { syncViewModel.refreshTxHistory() },
+                        onSelectHistory = { syncViewModel.selectTxHistory(it) },
                         onDismiss = {
                             syncViewModel.showTxDraft = false
                             syncViewModel.clearSyncMessages()

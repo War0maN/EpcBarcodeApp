@@ -125,6 +125,9 @@ class SyncViewModel : ViewModel() {
             activeReceipt = null
             receipts = emptyList()
             progress = emptyList()
+            rcvClosed = emptyList()
+            rcvHistory = null
+            rcvHistoryProgress = emptyList()
             selectStocktake(null)
             selectHistoryStocktake(null)
             stocktakes = emptyList()
@@ -160,6 +163,46 @@ class SyncViewModel : ViewModel() {
         progress = emptyList()
         syncMessage = null
         if (r != null) refreshProgress()
+    }
+
+    // ── Хүлээн авалтын түүх (хаагдсан ажлууд) ──
+    var rcvClosed by mutableStateOf<List<ReceivingApi.Receipt>>(emptyList()); private set
+    var rcvClosedLoading by mutableStateOf(false); private set
+    var rcvHistory by mutableStateOf<ReceivingApi.Receipt?>(null); private set
+    var rcvHistoryProgress by mutableStateOf<List<ReceivingApi.ProgressItem>>(emptyList()); private set
+    var rcvHistoryLoading by mutableStateOf(false); private set
+
+    fun refreshClosedReceipts() {
+        rcvClosedLoading = true
+        syncError = null
+        viewModelScope.launch {
+            try {
+                rcvClosed = ReceivingApi.listClosedReceipts()
+            } catch (e: Exception) {
+                Log.w(TAG, "listClosedReceipts failed", e)
+                syncError = "Түүх татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                rcvClosedLoading = false
+            }
+        }
+    }
+
+    /** Хаагдсан ажил сонгож хөлдсөн явцыг нь татна (зөвхөн харах). */
+    fun selectHistoryReceipt(r: ReceivingApi.Receipt?) {
+        rcvHistory = r
+        rcvHistoryProgress = emptyList()
+        if (r == null) return
+        rcvHistoryLoading = true
+        viewModelScope.launch {
+            try {
+                rcvHistoryProgress = ReceivingApi.fetchProgress(r.id)
+            } catch (e: Exception) {
+                Log.w(TAG, "history fetchProgress failed", e)
+                syncError = "Түүх татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                rcvHistoryLoading = false
+            }
+        }
     }
 
     fun refreshProgress() {
@@ -561,12 +604,62 @@ class SyncViewModel : ViewModel() {
     /** Локал тулгалтад тооцогдсон hex-үүд (давхардал 1 л удаа). */
     private val txSeen = HashSet<String>()
 
+    // ── Гүйлгээний түүх (цэсний Түүх карт) ──
+    var txHistory by mutableStateOf<List<TxDraftApi.TxRow>>(emptyList()); private set
+    var txHistoryLoading by mutableStateOf(false); private set
+    var txHistoryDetail by mutableStateOf<TxDraftApi.TxRow?>(null); private set
+    /** productId → ширхэг (түүхийн дэлгэрэнгүй, бараагаар бүлэглэсэн). */
+    var txHistoryItems by mutableStateOf<Map<String, Int>>(emptyMap()); private set
+    var txHistoryItemsLoading by mutableStateOf(false); private set
+
+    fun refreshTxHistory() {
+        txHistoryLoading = true
+        syncError = null
+        viewModelScope.launch {
+            try {
+                txHistory = TxDraftApi.listHistory(txType)
+            } catch (e: Exception) {
+                Log.w(TAG, "listHistory failed", e)
+                syncError = "Түүх татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                txHistoryLoading = false
+            }
+        }
+    }
+
+    /** Түүхийн гүйлгээ сонгож мөрүүдийг нь бараагаар бүлэглэж татна. */
+    fun selectTxHistory(t: TxDraftApi.TxRow?) {
+        txHistoryDetail = t
+        txHistoryItems = emptyMap()
+        if (t == null) return
+        txHistoryItemsLoading = true
+        viewModelScope.launch {
+            try {
+                val items = TxDraftApi.fetchTxItems(t.id)
+                val grouped = items.groupingBy { it.productId ?: "?" }.eachCount()
+                val missingMeta = grouped.keys - txProductMeta.keys
+                if (missingMeta.isNotEmpty()) {
+                    txProductMeta = txProductMeta + StocktakeApi.fetchProducts(missingMeta)
+                }
+                txHistoryItems = grouped
+            } catch (e: Exception) {
+                Log.w(TAG, "fetchTxItems failed", e)
+                syncError = "Түүх татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                txHistoryItemsLoading = false
+            }
+        }
+    }
+
     /** Нүүрний нүднээс: төрөл тогтоож, жагсаалт + салбаруудыг татна. */
     fun openTxDraft(type: String) {
         txType = type
         showTxDraft = true
         activeDraft = null
         txCartByProduct = emptyMap()
+        txHistory = emptyList()
+        txHistoryDetail = null
+        txHistoryItems = emptyMap()
         refreshTxDrafts()
         if (txBranches.isEmpty()) {
             viewModelScope.launch {

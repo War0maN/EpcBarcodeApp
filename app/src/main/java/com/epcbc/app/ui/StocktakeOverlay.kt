@@ -393,9 +393,9 @@ fun StocktakeOverlay(
     }
 }
 
-/** Цэсний нэг мөр-карт. */
+/** Цэсний нэг мөр-карт (Тооллого + гүйлгээний нүднүүд хуваалцана). */
 @Composable
-private fun MenuCard(emoji: String, title: String, subtitle: String, onClick: () -> Unit) {
+internal fun MenuCard(emoji: String, title: String, subtitle: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()

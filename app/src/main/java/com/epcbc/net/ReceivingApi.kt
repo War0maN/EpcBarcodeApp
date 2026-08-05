@@ -57,6 +57,18 @@ object ReceivingApi {
             }
             .decodeList<Receipt>()
 
+    /** Хаагдсан ажлууд (түүх) — явц нь receipt_progress-т хэвээр үлддэг. */
+    suspend fun listClosedReceipts(count: Long = 30): List<Receipt> =
+        Supa.client.postgrest.from("receipts")
+            .select(
+                Columns.raw("id, status, created_at, jobs(job_number, arrival_date, supplier, note), branches(name)")
+            ) {
+                filter { eq("status", "closed") }
+                order("created_at", Order.DESCENDING)
+                limit(count)
+            }
+            .decodeList<Receipt>()
+
     @Serializable
     data class ProgressRow(
         @SerialName("product_id") val productId: String,

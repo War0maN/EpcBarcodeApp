@@ -236,4 +236,55 @@ object TxDraftApi {
             buildJsonObject { put("p_draft", draftId) }
         )
     }
+
+    // ── Түүх: энэ төрлөөр хийгдсэн жинхэнэ гүйлгээнүүд ──
+
+    @Serializable
+    data class TxRow(
+        val id: String,
+        @SerialName("tx_number") val txNumber: String? = null,
+        val status: String, // pending | done | cancelled
+        @SerialName("from_branch") val fromBranch: String? = null,
+        @SerialName("to_branch") val toBranch: String? = null,
+        val note: String? = null,
+        @SerialName("created_at") val createdAt: String,
+    )
+
+    /** Сүүлийн гүйлгээнүүд (RLS scoping автоматаар — өөрийн харах эрхтэйг л). */
+    suspend fun listHistory(type: String, count: Long = 30): List<TxRow> =
+        Supa.client.postgrest.from("transactions")
+            .select(Columns.raw("id, tx_number, status, from_branch, to_branch, note, created_at")) {
+                filter { eq("type", type) }
+                order("created_at", Order.DESCENDING)
+                limit(count)
+            }
+            .decodeList<TxRow>()
+
+    @Serializable
+    data class TxItemRow(
+        @SerialName("epc_id") val epcId: String,
+        @SerialName("epc_codes") val epc: EpcRef? = null,
+    ) {
+        val productId: String? get() = epc?.productId
+    }
+
+    /** Гүйлгээний мөрүүд (бараагаар бүлэглэхэд) — 1000-аар хуудаслана. */
+    suspend fun fetchTxItems(txId: String): List<TxItemRow> {
+        val out = ArrayList<TxItemRow>()
+        val page = 1000
+        var from = 0L
+        while (true) {
+            val chunk = Supa.client.postgrest.from("transaction_items")
+                .select(Columns.raw("epc_id, epc_codes(product_id)")) {
+                    filter { eq("transaction_id", txId) }
+                    order("epc_id", Order.ASCENDING)
+                    range(from, from + page - 1)
+                }
+                .decodeList<TxItemRow>()
+            out.addAll(chunk)
+            if (chunk.size < page) break
+            from += page
+        }
+        return out
+    }
 }
