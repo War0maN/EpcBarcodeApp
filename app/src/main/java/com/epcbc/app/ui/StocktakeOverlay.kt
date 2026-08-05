@@ -106,15 +106,12 @@ fun StocktakeOverlay(
     historyRows: List<StRow>,
     historyExtra: Long,
     historyLoading: Boolean,
-    historyMissingRows: List<StExtraRow>,
-    missingLoading: Boolean,
     onRefreshList: () -> Unit,
     onSelect: (StocktakeApi.Stocktake?) -> Unit,
     onRefreshProgress: () -> Unit,
     onSubmit: () -> Unit,
     onFindMissing: (productId: String) -> Unit,
     onLoadExtras: (stocktakeId: String) -> Unit,
-    onLoadMissing: (stocktakeId: String) -> Unit,
     onCreate: (branchId: String, note: String?) -> Unit,
     onRefreshClosed: () -> Unit,
     onSelectHistory: (StocktakeApi.Stocktake?) -> Unit,
@@ -191,14 +188,39 @@ fun StocktakeOverlay(
                     }
                 }
 
-                // ---------- Дутуугийн дэлгэрэнгүй (түүх) ----------
+                // ---------- Дутуугийн дэлгэрэнгүй (түүх): бараа × ширхэг ----------
+                // EPC бүрээр биш — вебээс жагсаалтыг нь хардаг тул энд зөвхөн
+                // ямар бараа хэдэн ширхэг дутуу гэдэг тоог харуулна (2026-08-05).
                 detail == "missing" -> {
-                    if (missingLoading) {
-                        Text("Дутуугийн жагсаалт татаж байна…", modifier = Modifier.padding(top = 16.dp))
-                    } else if (historyMissingRows.isEmpty()) {
+                    val missingRows = historyRows
+                        .filter { it.found < it.expected }
+                        .sortedByDescending { it.expected - it.found }
+                    if (missingRows.isEmpty()) {
                         Text("Дутуу алга — бүрэн тоологдсон.", modifier = Modifier.padding(top = 16.dp))
                     } else {
-                        ExtraList(historyMissingRows)
+                        Spacer(Modifier.height(4.dp))
+                        LazyColumn {
+                            items(missingRows, key = { it.productId }) { r ->
+                                Row(
+                                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(r.name, maxLines = 2)
+                                        r.sku?.takeIf { it != r.name }?.let {
+                                            Text(it, style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    Text(
+                                        "${r.expected - r.found} ш",
+                                        color = RED,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                HorizontalDivider()
+                            }
+                        }
                     }
                 }
 
@@ -228,10 +250,7 @@ fun StocktakeOverlay(
                     } else {
                         HistoryDetail(
                             st = history, rows = historyRows, extra = historyExtra,
-                            onMissingClick = {
-                                detail = "missing"
-                                onLoadMissing(history.id)
-                            },
+                            onMissingClick = { detail = "missing" },
                             onExtrasClick = {
                                 detail = "extras"
                                 onLoadExtras(history.id)

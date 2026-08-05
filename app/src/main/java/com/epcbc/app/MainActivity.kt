@@ -308,17 +308,6 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                     }
-                    // Түүхийн "Дутуу" мөрүүд (нэр нь түүхийн metaгаас)
-                    val stMissingUiRows = syncViewModel.stMissingRows.map { m ->
-                        val meta = syncViewModel.stHistoryMeta[m.productId]
-                        com.epcbc.app.ui.StExtraRow(
-                            epcHex = m.epcHex,
-                            name = meta?.name ?: meta?.sku ?: meta?.gtin ?: m.productId.take(8),
-                            sku = meta?.sku,
-                            status = null,
-                            branchName = null,
-                        )
-                    }
                     // Түүхийн мөрүүд (хаагдсан тооллого — зөвхөн харах)
                     val stHistoryRows = syncViewModel.stHistoryProgress.map { r ->
                         val meta = syncViewModel.stHistoryMeta[r.productId]
@@ -352,11 +341,8 @@ class MainActivity : ComponentActivity() {
                         historyRows = stHistoryRows,
                         historyExtra = syncViewModel.stHistoryExtra,
                         historyLoading = syncViewModel.stHistoryLoading,
-                        historyMissingRows = stMissingUiRows,
-                        missingLoading = syncViewModel.stMissingLoading,
                         onRefreshList = { syncViewModel.refreshStocktakes() },
                         onLoadExtras = { syncViewModel.loadStocktakeExtras(it) },
-                        onLoadMissing = { syncViewModel.loadStocktakeMissing(it) },
                         onCreate = { branchId, note ->
                             // Шинэ тооллогод буфер цэвэрлэгдэнэ (өмнөх ажлын
                             // уншилт хутгалдахгүй).

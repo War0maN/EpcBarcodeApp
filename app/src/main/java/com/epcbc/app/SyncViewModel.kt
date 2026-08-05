@@ -345,24 +345,6 @@ class SyncViewModel : ViewModel() {
     var stHistoryMeta by mutableStateOf<Map<String, StocktakeApi.ProductInfo>>(emptyMap()); private set
     var stHistoryExtra by mutableStateOf(0L); private set
 
-    // Түүхийн "Дутуу" дэлгэрэнгүй (хөлдсөн snapshot − тоологдсон)
-    var stMissingLoading by mutableStateOf(false); private set
-    var stMissingRows by mutableStateOf<List<StocktakeApi.MissingRow>>(emptyList()); private set
-
-    fun loadStocktakeMissing(stocktakeId: String) {
-        stMissingLoading = true
-        viewModelScope.launch {
-            try {
-                stMissingRows = StocktakeApi.fetchMissing(stocktakeId)
-            } catch (e: Exception) {
-                Log.w(TAG, "loadStocktakeMissing failed", e)
-                syncError = "Дутуугийн жагсаалт татахад алдаа: ${e.message ?: "холболт"}"
-            } finally {
-                stMissingLoading = false
-            }
-        }
-    }
-
     fun refreshClosedStocktakes() {
         stClosedLoading = true
         syncError = null
@@ -383,7 +365,6 @@ class SyncViewModel : ViewModel() {
         stHistoryProgress = emptyList()
         stHistoryMeta = emptyMap()
         stHistoryExtra = 0
-        stMissingRows = emptyList()
         stExtrasScans = emptyList()
         stExtrasEpc = emptyMap()
         stExtrasMeta = emptyMap()

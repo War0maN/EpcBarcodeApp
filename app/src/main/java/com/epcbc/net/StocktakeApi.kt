@@ -115,32 +115,6 @@ object StocktakeApi {
     }
 
     @Serializable
-    data class MissingRow(
-        @SerialName("epc_hex") val epcHex: String,
-        @SerialName("product_id") val productId: String,
-    )
-
-    /** Дутуу (тоологдоогүй) EPC-үүд — stocktake_missing view, cap-тай. */
-    suspend fun fetchMissing(stocktakeId: String, cap: Long = 3000): List<MissingRow> {
-        val out = ArrayList<MissingRow>()
-        val page = 1000L
-        var from = 0L
-        while (from < cap) {
-            val chunk = Supa.client.postgrest.from("stocktake_missing")
-                .select(Columns.raw("epc_hex, product_id")) {
-                    filter { eq("stocktake_id", stocktakeId) }
-                    order("epc_hex", Order.ASCENDING)
-                    range(from, from + page - 1)
-                }
-                .decodeList<MissingRow>()
-            out.addAll(chunk)
-            if (chunk.size < page) break
-            from += page
-        }
-        return out
-    }
-
-    @Serializable
     data class EpcInfo(
         val id: String,
         val status: String,
