@@ -256,12 +256,12 @@ class SyncViewModel : ViewModel() {
     var stExtrasEpc by mutableStateOf<Map<String, StocktakeApi.EpcInfo>>(emptyMap()); private set
     var stExtrasMeta by mutableStateOf<Map<String, StocktakeApi.ProductInfo>>(emptyMap()); private set
 
-    fun loadStocktakeExtras() {
-        val st = activeStocktake ?: return
+    fun loadStocktakeExtras(stocktakeId: String? = null) {
+        val id = stocktakeId ?: activeStocktake?.id ?: return
         stExtrasLoading = true
         viewModelScope.launch {
             try {
-                val scans = StocktakeApi.fetchExtraScans(st.id)
+                val scans = StocktakeApi.fetchExtraScans(id)
                 // Хуучин (хөлдөөгүй) сканд одоогийн төлөв/салбараар нөхнө.
                 val needEpc = scans.filter { it.scanStatus == null && it.epcId != null }.mapNotNull { it.epcId }
                 val epcMap = if (needEpc.isEmpty()) emptyMap() else StocktakeApi.fetchEpcInfo(needEpc)
@@ -345,6 +345,24 @@ class SyncViewModel : ViewModel() {
     var stHistoryMeta by mutableStateOf<Map<String, StocktakeApi.ProductInfo>>(emptyMap()); private set
     var stHistoryExtra by mutableStateOf(0L); private set
 
+    // Түүхийн "Дутуу" дэлгэрэнгүй (хөлдсөн snapshot − тоологдсон)
+    var stMissingLoading by mutableStateOf(false); private set
+    var stMissingRows by mutableStateOf<List<StocktakeApi.MissingRow>>(emptyList()); private set
+
+    fun loadStocktakeMissing(stocktakeId: String) {
+        stMissingLoading = true
+        viewModelScope.launch {
+            try {
+                stMissingRows = StocktakeApi.fetchMissing(stocktakeId)
+            } catch (e: Exception) {
+                Log.w(TAG, "loadStocktakeMissing failed", e)
+                syncError = "Дутуугийн жагсаалт татахад алдаа: ${e.message ?: "холболт"}"
+            } finally {
+                stMissingLoading = false
+            }
+        }
+    }
+
     fun refreshClosedStocktakes() {
         stClosedLoading = true
         syncError = null
@@ -365,6 +383,10 @@ class SyncViewModel : ViewModel() {
         stHistoryProgress = emptyList()
         stHistoryMeta = emptyMap()
         stHistoryExtra = 0
+        stMissingRows = emptyList()
+        stExtrasScans = emptyList()
+        stExtrasEpc = emptyMap()
+        stExtrasMeta = emptyMap()
         if (st == null) return
         stHistoryLoading = true
         viewModelScope.launch {

@@ -1,11 +1,13 @@
 package com.epcbc.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,7 +53,7 @@ data class StRow(
     val found: Int,
 )
 
-/** "Илүү"-гийн нэг мөр — яагаад илүү болохыг төлөв/салбар нь тайлбарлана. */
+/** Илүү/Дутуугийн нэг мөр (status/branch null бол баруун багана нуугдана). */
 data class StExtraRow(
     val epcHex: String,
     val name: String,
@@ -69,11 +71,17 @@ internal val ST_STATUS_LABEL = mapOf(
     "other" to "Бусад гүйлгээ",
 )
 
+// Статистикийн тогтмол өнгөнүүд (нэр нь тоотойгоо ижил өнгөтэй — 2026-08-05).
+private val GREEN = Color(0xFF059669)
+private val RED = Color(0xFFDC2626)
+private val ORANGE = Color(0xFFD97706)
+
 /**
  * Тооллогын overlay — Dialog БИШ, in-tree Surface (PTT товч Activity-д хүрнэ).
- * Навигаци (2026-08-05): толгойд ГАНЦ товч — цэсэнд "Хаах" (overlay хаана),
- * дэд дэлгэцүүдэд "Буцах" (зөвхөн НЭГ алхам ухарна; шууд нүүр рүү үсрэхгүй).
- * Түүх/Илүү: таг бүрийн жагсаалт ТАТАХГҮЙ — зөвхөн нэгтгэл (гацахгүй).
+ * Навигаци: толгойд ГАНЦ товч — цэсэнд "Хаах", дэд дэлгэцүүдэд "Буцах"
+ * (зөвхөн НЭГ алхам). Түүх/Илүү/Дутуу: таг бүрийн snapshot ТАТАХГҮЙ,
+ * зөвхөн нэгтгэл/жагсаалтын дэлгэрэнгүй (гацахгүй). Түүхийн Илүү нь
+ * СКАН ХИЙХ ҮЕИЙН хөлдсөн төлөв/салбараа харуулна (вебтэй ижил).
  */
 @Composable
 fun StocktakeOverlay(
@@ -98,25 +106,27 @@ fun StocktakeOverlay(
     historyRows: List<StRow>,
     historyExtra: Long,
     historyLoading: Boolean,
+    historyMissingRows: List<StExtraRow>,
+    missingLoading: Boolean,
     onRefreshList: () -> Unit,
     onSelect: (StocktakeApi.Stocktake?) -> Unit,
     onRefreshProgress: () -> Unit,
     onSubmit: () -> Unit,
     onFindMissing: (productId: String) -> Unit,
-    onLoadExtras: () -> Unit,
+    onLoadExtras: (stocktakeId: String) -> Unit,
+    onLoadMissing: (stocktakeId: String) -> Unit,
     onCreate: (branchId: String, note: String?) -> Unit,
     onRefreshClosed: () -> Unit,
     onSelectHistory: (StocktakeApi.Stocktake?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var mode by rememberSaveable { mutableStateOf("menu") }
-    // Идэвхтэй тооллогын "Илүү" дэлгэрэнгүй нээлттэй эсэх.
-    var extrasOpen by rememberSaveable { mutableStateOf(false) }
+    // Дэлгэрэнгүй дэд дэлгэцүүд: null | "extras" | "missing"
+    var detail by rememberSaveable { mutableStateOf<String?>(null) }
 
-    /** Нэг алхам ухрах — толгойн "Буцах" ба төхөөрөмжийн Back хоёул үүгээр. */
     val goBack: () -> Unit = {
         when {
-            extrasOpen -> extrasOpen = false
+            detail != null -> detail = null
             active != null -> onSelect(null)
             history != null -> onSelectHistory(null)
             mode != "menu" -> mode = "menu"
@@ -126,6 +136,7 @@ fun StocktakeOverlay(
     BackHandler(onBack = goBack)
 
     val atMenu = active == null && history == null && mode == "menu"
+    val missingTotal = historyRows.sumOf { (it.expected - it.found).coerceAtLeast(0) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -136,7 +147,8 @@ fun StocktakeOverlay(
                 .padding(12.dp)
         ) {
             val title = when {
-                extrasOpen -> "Илүү — $extraServer"
+                detail == "extras" -> "Илүү — ${if (active != null) extraServer else historyExtra}"
+                detail == "missing" -> "Дутуу — $missingTotal"
                 active != null -> "${active.number} · ${active.branchName}"
                 history != null -> "${history.number} · ${history.branchName}"
                 mode == "create" -> "Тооллого эхлүүлэх"
@@ -162,45 +174,31 @@ fun StocktakeOverlay(
             message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
 
             when {
-                // ---------- "Илүү"-гийн дэлгэрэнгүй ----------
-                extrasOpen -> {
+                // ---------- Илүүгийн дэлгэрэнгүй (идэвхтэй + түүх хоёул) ----------
+                detail == "extras" -> {
                     if (extrasLoading) {
                         Text("Илүүгийн жагсаалт татаж байна…", modifier = Modifier.padding(top = 16.dp))
                     } else if (extras.isEmpty()) {
                         Text("Илүү уншилт алга.", modifier = Modifier.padding(top = 16.dp))
                     } else {
                         Text(
-                            "Бүртгэлтэй ч энэ тооллогын жагсаалтад байгаагүй таг — төлөв/салбар нь шалтгааныг хэлнэ.",
+                            "Бүртгэлтэй ч жагсаалтад байгаагүй таг — СКАН ХИЙХ ҮЕИЙН төлөв/салбар нь шалтгааныг хэлнэ.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(6.dp))
-                        LazyColumn {
-                            items(extras, key = { it.epcHex }) { e ->
-                                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(e.name, maxLines = 2)
-                                        Text(
-                                            listOfNotNull(e.sku, "…" + e.epcHex.takeLast(6)).joinToString(" · "),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            ST_STATUS_LABEL[e.status] ?: e.status ?: "?",
-                                            color = Color(0xFFD97706),
-                                            fontWeight = FontWeight.Bold,
-                                        )
-                                        e.branchName?.let {
-                                            Text(it, style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                                HorizontalDivider()
-                            }
-                        }
+                        ExtraList(extras)
+                    }
+                }
+
+                // ---------- Дутуугийн дэлгэрэнгүй (түүх) ----------
+                detail == "missing" -> {
+                    if (missingLoading) {
+                        Text("Дутуугийн жагсаалт татаж байна…", modifier = Modifier.padding(top = 16.dp))
+                    } else if (historyMissingRows.isEmpty()) {
+                        Text("Дутуу алга — бүрэн тоологдсон.", modifier = Modifier.padding(top = 16.dp))
+                    } else {
+                        ExtraList(historyMissingRows)
                     }
                 }
 
@@ -210,13 +208,14 @@ fun StocktakeOverlay(
                         Text("Тооллогын жагсаалт татаж байна…", modifier = Modifier.padding(top = 16.dp))
                     } else {
                         ActiveStocktake(
-                            rows = rows, extraServer = extraServer, pendingCount = pendingCount,
-                            submitBusy = submitBusy, progressLoading = progressLoading,
+                            st = active, rows = rows, extraServer = extraServer,
+                            pendingCount = pendingCount, submitBusy = submitBusy,
+                            progressLoading = progressLoading,
                             onSubmit = onSubmit, onFindMissing = onFindMissing,
                             onRefreshProgress = onRefreshProgress,
                             onExtrasClick = {
-                                extrasOpen = true
-                                onLoadExtras()
+                                detail = "extras"
+                                onLoadExtras(active.id)
                             },
                         )
                     }
@@ -227,7 +226,17 @@ fun StocktakeOverlay(
                     if (historyLoading) {
                         Text("Түүх татаж байна…", modifier = Modifier.padding(top = 16.dp))
                     } else {
-                        HistoryDetail(st = history, rows = historyRows, extra = historyExtra)
+                        HistoryDetail(
+                            st = history, rows = historyRows, extra = historyExtra,
+                            onMissingClick = {
+                                detail = "missing"
+                                onLoadMissing(history.id)
+                            },
+                            onExtrasClick = {
+                                detail = "extras"
+                                onLoadExtras(history.id)
+                            },
+                        )
                     }
                 }
 
@@ -403,7 +412,80 @@ private fun StCard(
                 Text(dateOf(st), style = MaterialTheme.typography.bodySmall)
             }
             Text(st.branchName, style = MaterialTheme.typography.bodySmall)
-            st.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            st.note?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** Хүрээтэй мөр (статистик + огноо/тэмдэглэлийн мөрөнд). */
+@Composable
+private fun FramedRow(content: @Composable RowScope.() -> Unit) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = MaterialTheme.colorScheme.background,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+}
+
+/** Огноо (урд) + тэмдэглэл (ард) — хүрээтэй. Тэмдэглэл хоосон бол хоосон. */
+@Composable
+private fun InfoRow(date: String, note: String?) {
+    FramedRow {
+        Text(date, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            note ?: "",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+/** Илүү/Дутуугийн жагсаалт — нэр, SKU, hex сүүл (+ төлөв/салбар байвал). */
+@Composable
+private fun ExtraList(rows: List<StExtraRow>) {
+    LazyColumn {
+        items(rows, key = { it.epcHex }) { e ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text(e.name, maxLines = 2)
+                    Text(
+                        // Нэргүй бараанд SKU нэр болоод орсон бол давхардуулахгүй.
+                        listOfNotNull(e.sku?.takeIf { it != e.name }, "…" + e.epcHex.takeLast(6))
+                            .joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (e.status != null || e.branchName != null) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        e.status?.let {
+                            Text(
+                                ST_STATUS_LABEL[it] ?: it,
+                                color = ORANGE,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        e.branchName?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+            HorizontalDivider()
         }
     }
 }
@@ -411,6 +493,7 @@ private fun StCard(
 /** Идэвхтэй тооллогын амьд явц + илгээх. */
 @Composable
 private fun ActiveStocktake(
+    st: StocktakeApi.Stocktake,
     rows: List<StRow>,
     extraServer: Int,
     pendingCount: Int,
@@ -437,38 +520,13 @@ private fun ActiveStocktake(
         OutlinedButton(onClick = onRefreshProgress, enabled = !progressLoading) { Text("↻") }
     }
 
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        StStat("Тоологдсон", "$totalFound / $totalExpected",
-            if (totalFound >= totalExpected) Color(0xFF059669) else MaterialTheme.colorScheme.onBackground)
-        StStat("Дутуу", "$missing", if (missing > 0) Color(0xFFDC2626) else Color(0xFF059669))
-        // Илүү = серверийн ангилал (бүртгэлгүй таг орохгүй). Дарж дэлгэрэнгүй.
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.clickable { onExtrasClick() },
-        ) {
-            Text(
-                "$extraServer",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (extraServer > 0) Color(0xFFD97706) else MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                "Илүү " + if (extraServer > 0) "▸" else "",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+    FramedRow {
+        StStat("Тоологдсон", "$totalFound / $totalExpected", GREEN)
+        StStat("Дутуу", "$missing", RED)
+        StStat("Илүү", "$extraServer", ORANGE, onClick = onExtrasClick)
     }
-    Text(
-        "Тулгалт төхөөрөмж дээр шууд. Илгээх хүртэл сервер лүү юу ч бичигдэхгүй; " +
-            "давхардсан илгээлт аюулгүй (сервер алгасна).",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(Modifier.height(6.dp))
+    InfoRow(date = st.createdAt.take(10), note = st.note)
+    Spacer(Modifier.height(4.dp))
 
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text("БАРАА", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
@@ -490,8 +548,8 @@ private fun ActiveStocktake(
                     "${r.found} / ${r.expected}",
                     modifier = Modifier.width(72.dp),
                     color = when {
-                        done -> Color(0xFF059669)
-                        r.found > 0 -> Color(0xFFD97706)
+                        done -> GREEN
+                        r.found > 0 -> ORANGE
                         else -> MaterialTheme.colorScheme.onBackground
                     },
                     fontWeight = if (done) FontWeight.Bold else FontWeight.Normal,
@@ -505,30 +563,27 @@ private fun ActiveStocktake(
     }
 }
 
-/** Хаагдсан тооллогын дүн — зөвхөн харах (хөлдсөн баримт). */
+/** Хаагдсан тооллогын дүн — зөвхөн харах; Дутуу/Илүү дарж дэлгэрэнгүй. */
 @Composable
 private fun HistoryDetail(
     st: StocktakeApi.Stocktake,
     rows: List<StRow>,
     extra: Long,
+    onMissingClick: () -> Unit,
+    onExtrasClick: () -> Unit,
 ) {
     val totalExpected = rows.sumOf { it.expected }
     val totalFound = rows.sumOf { it.found }
     val missing = (totalExpected - totalFound).coerceAtLeast(0)
 
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        StStat("Тоологдсон", "$totalFound / $totalExpected",
-            if (totalFound >= totalExpected) Color(0xFF059669) else MaterialTheme.colorScheme.onBackground)
-        StStat("Дутуу", "$missing", if (missing > 0) Color(0xFFDC2626) else Color(0xFF059669))
-        StStat("Илүү", "$extra", if (extra > 0) Color(0xFFD97706) else MaterialTheme.colorScheme.onBackground)
+    FramedRow {
+        StStat("Тоологдсон", "$totalFound / $totalExpected", GREEN)
+        StStat("Дутуу", "$missing", RED, onClick = onMissingClick)
+        StStat("Илүү", "$extra", ORANGE, onClick = onExtrasClick)
     }
-    st.note?.let {
-        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    Spacer(Modifier.height(6.dp))
+    InfoRow(date = st.closedAt?.take(10) ?: st.createdAt.take(10), note = st.note)
+    Spacer(Modifier.height(4.dp))
+
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text("БАРАА", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
         Text("ТООЛОГДСОН", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(96.dp))
@@ -548,7 +603,7 @@ private fun HistoryDetail(
                 Text(
                     "${r.found} / ${r.expected}",
                     modifier = Modifier.width(96.dp),
-                    color = if (done) Color(0xFF059669) else Color(0xFFDC2626),
+                    color = if (done) GREEN else RED,
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -557,12 +612,21 @@ private fun HistoryDetail(
     }
 }
 
-/** Нэг тоон статистик — ГОЛ тоо том, тайлбар жижиг (2026-08-05 дүрэм). */
+/**
+ * Нэг тоон статистик — тоо том, нэр нь тоотойгоо ИЖИЛ өнгөтэй (2026-08-05).
+ * onClick өгвөл дарж дэлгэрэнгүй нээнэ (▸ тэмдэгтэй).
+ */
 @Composable
-internal fun StStat(label: String, value: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+internal fun StStat(label: String, value: String, color: Color, onClick: (() -> Unit)? = null) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier,
+    ) {
         Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = color)
-        Text(label, style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            label + if (onClick != null) " ▸" else "",
+            style = MaterialTheme.typography.bodySmall,
+            color = color,
+        )
     }
 }
