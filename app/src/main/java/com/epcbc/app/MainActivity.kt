@@ -59,6 +59,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         Log.i(TAG, "MainActivity.onCreate")
 
+        // Офлайн буферийн дараалал дискээс сэргэнэ (апп унтарсан ч алдагдаагүй).
+        OfflineQueue.init(filesDir)
+
         // Шинэ уншилт бүрийг тооллогын + даалгаврын амьд тулгагч руу дамжуулна
         // (идэвхтэй ажилгүй үед hook-ууд дотроо шууд буцдаг — зардал 0).
         viewModel.onNewEpcs = {
@@ -130,6 +133,7 @@ class MainActivity : ComponentActivity() {
                         readerReady = viewModel.readerReady,
                         readerStatus = viewModel.statusMessage,
                         outputPower = viewModel.outputPower,
+                        offlineCount = OfflineQueue.count,
                         tiles = listOf(
                             HomeTile("stocktake", "📋", "Тооллого",
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),

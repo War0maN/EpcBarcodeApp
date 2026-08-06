@@ -48,6 +48,8 @@ fun HomeScreen(
     readerReady: Boolean,
     readerStatus: String,
     outputPower: Int,
+    /** Офлайн буферт хүлээж буй багцын тоо (0 = индикатор нуугдана). */
+    offlineCount: Int,
     tiles: List<HomeTile>,
     onRetryReader: () -> Unit,
     onOpenProfile: () -> Unit,
@@ -92,6 +94,28 @@ fun HomeScreen(
                         color = stripColor,
                         maxLines = 2,
                     )
+                }
+            }
+            // Офлайн буферийн индикатор — дараалалд багц байгаа үед л.
+            if (offlineCount > 0) {
+                Spacer(Modifier.height(6.dp))
+                Surface(
+                    color = Color(0xFFD97706).copy(alpha = 0.12f),
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("📴", fontSize = 14.sp)
+                        Text(
+                            "  Офлайн буфер: $offlineCount багц — сүлжээ сэргэхэд автоматаар илгээгдэнэ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFD97706),
+                            maxLines = 2,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))

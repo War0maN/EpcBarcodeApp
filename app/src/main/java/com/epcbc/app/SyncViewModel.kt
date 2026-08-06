@@ -14,6 +14,9 @@ import com.epcbc.net.TxDraftApi
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
+import io.github.jan.supabase.exceptions.RestException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -26,6 +29,41 @@ class SyncViewModel : ViewModel() {
 
     /** Auth төлөв — Compose-д collectAsState-ээр сонсоно. */
     val sessionStatus: StateFlow<SessionStatus> get() = Supa.client.auth.sessionStatus
+
+    init {
+        // Офлайн буферийн авто-давталт: дараалалд багц байгаа бөгөөд нэвтэрсэн
+        // үед 20 секунд тутам илгээхийг оролдоно. ⚠ Нэвтрээгүй үед flush
+        // ХИЙХГҮЙ — 401 нь RestException тул багцууд "татгалзсан" гэж
+        // хасагдчих байсан.
+        viewModelScope.launch {
+            while (true) {
+                if (OfflineQueue.count > 0 &&
+                    sessionStatus.value is SessionStatus.Authenticated
+                ) {
+                    runCatching { OfflineQueue.flush() }
+                    OfflineQueue.lastMessage?.let {
+                        syncMessage = it
+                        OfflineQueue.lastMessage = null
+                    }
+                }
+                delay(20_000)
+            }
+        }
+    }
+
+    /**
+     * Скан илгээлтийн сүлжээний алдааг офлайн буферт хадгална.
+     * @return true = хадгалагдсан (дуудагч буфераа цэвэрлэж болно);
+     *         false = серверийн татгалзал (жинхэнэ алдаа — хэрэглэгчид харуул).
+     */
+    private suspend fun queueIfOffline(e: Exception, kind: String, targetId: String, hexes: List<String>): Boolean {
+        if (e is CancellationException) throw e
+        if (e is RestException) return false
+        OfflineQueue.enqueue(kind, targetId, hexes)
+        syncMessage = "📴 Сүлжээгүй — ${hexes.size} уншилт офлайн буферт хадгалагдлаа. " +
+            "Сүлжээ сэргэхэд автоматаар илгээгдэнэ (апп хаагдсан ч алдагдахгүй)."
+        return true
+    }
 
     var authBusy by mutableStateOf(false); private set
     var authError by mutableStateOf<String?>(null); private set
@@ -244,7 +282,11 @@ class SyncViewModel : ViewModel() {
                 progress = ReceivingApi.fetchProgress(r.id)
             } catch (e: Exception) {
                 Log.w(TAG, "submitScans failed", e)
-                syncError = "Илгээхэд алдаа: ${e.message ?: "холболт"} — дахин илгээхэд аюулгүй (давхардахгүй)."
+                if (queueIfOffline(e, "receiving", r.id, hexes)) {
+                    onSuccess() // буфер дараалалд шилжсэн — дэлгэцийн тоолуур 0
+                } else {
+                    syncError = "Илгээхэд алдаа: ${e.message ?: "холболт"} — дахин илгээхэд аюулгүй (давхардахгүй)."
+                }
             } finally {
                 submitBusy = false
             }
@@ -542,7 +584,11 @@ class SyncViewModel : ViewModel() {
                 for (r in rows) stFoundServer[r.productId] = r.found
             } catch (e: Exception) {
                 Log.w(TAG, "submitStocktakeScans failed", e)
-                syncError = "Илгээхэд алдаа: ${e.message ?: "холболт"} — дахин илгээхэд аюулгүй (давхардахгүй)."
+                if (queueIfOffline(e, "stocktake", st.id, hexes)) {
+                    onSuccess() // локал тоолуур аль хэдийн тоолсон — буфер л чөлөөлөгдөнө
+                } else {
+                    syncError = "Илгээхэд алдаа: ${e.message ?: "холболт"} — дахин илгээхэд аюулгүй (давхардахгүй)."
+                }
             } finally {
                 submitBusy = false
             }
@@ -732,7 +778,11 @@ class SyncViewModel : ViewModel() {
                 if (remaining == 0) refreshIncoming()
             } catch (e: Exception) {
                 Log.w(TAG, "receiveScan failed", e)
-                syncError = "Хүлээн авахад алдаа: ${e.message ?: "холболт"}"
+                if (queueIfOffline(e, "txreceive", t.id, hexes)) {
+                    onSuccess?.invoke() // буфер дараалалд шилжсэн
+                } else {
+                    syncError = "Хүлээн авахад алдаа: ${e.message ?: "холболт"}"
+                }
             } finally {
                 submitBusy = false
             }
@@ -954,7 +1004,13 @@ class SyncViewModel : ViewModel() {
                 selectTxDraftInternal(activeDraft ?: d, null)
             } catch (e: Exception) {
                 Log.w(TAG, "txScanBuffer failed", e)
-                syncError = "Сагслахад алдаа: ${e.message ?: "холболт"} — дахин илгээхэд аюулгүй (давхардахгүй)."
+                if (queueIfOffline(e, "txdraft", d.id, hexes)) {
+                    // Сагсны серверийн тоо flush хүртэл өөрчлөгдөхгүй —
+                    // "Гүйлгээ болгох" ч офлайнд боломжгүй тул зөрчилгүй.
+                    onSuccess()
+                } else {
+                    syncError = "Сагслахад алдаа: ${e.message ?: "холболт"} — дахин илгээхэд аюулгүй (давхардахгүй)."
+                }
             } finally {
                 submitBusy = false
             }
