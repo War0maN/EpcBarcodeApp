@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -31,6 +33,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.composables.icons.lucide.ArrowLeft
+import com.composables.icons.lucide.Bot
+import com.composables.icons.lucide.CircleUserRound
+import com.composables.icons.lucide.FileText
+import com.composables.icons.lucide.KeyRound
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Moon
 import androidx.compose.ui.unit.sp
 
 /**
@@ -70,7 +81,11 @@ fun ProfileScreen(
                     .verticalScroll(rememberScrollState())
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onBack) { Text("← Нүүр") }
+                    TextButton(onClick = onBack) {
+                Icon(Lucide.ArrowLeft, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Нүүр")
+            }
                     Text(
                         "Профайл",
                         style = MaterialTheme.typography.titleMedium,
@@ -82,7 +97,8 @@ fun ProfileScreen(
                 // Акаунтын карт
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("👤", fontSize = 30.sp)
+                        Icon(Lucide.CircleUserRound, contentDescription = null, modifier = Modifier.size(34.dp),
+                            tint = MaterialTheme.colorScheme.primary)
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(
                                 if (loggedIn) (email ?: "") else "Нэвтрээгүй",
@@ -100,15 +116,15 @@ fun ProfileScreen(
                 Spacer(Modifier.height(14.dp))
 
                 if (loggedIn) {
-                    ProfileRow("🔑", "Нууц үг солих") { page = "password" }
+                    ProfileRow(Lucide.KeyRound, "Нууц үг солих") { page = "password" }
                 } else {
-                    ProfileRow("🔑", "Нэвтрэх") { onLogin() }
+                    ProfileRow(Lucide.KeyRound, "Нэвтрэх") { onLogin() }
                 }
-                ProfileRow("🌙", "Бараан горим", trailing = {
+                ProfileRow(Lucide.Moon, "Бараан горим", trailing = {
                     Switch(checked = isDark, onCheckedChange = onToggleDark)
                 })
-                ProfileRow("📄", "Үйлчилгээний нөхцөл", enabled = false, note = "удахгүй")
-                ProfileRow("🤖", "AI туслах", enabled = false, note = "удахгүй")
+                ProfileRow(Lucide.FileText, "Үйлчилгээний нөхцөл", enabled = false, note = "удахгүй")
+                ProfileRow(Lucide.Bot, "AI туслах", enabled = false, note = "удахгүй")
 
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.height(24.dp))
@@ -132,7 +148,7 @@ fun ProfileScreen(
 /** Unitel-маягийн нэг мөр: тусдаа хүрээтэй карт, emoji + нэр + › (эсвэл өөр trailing). */
 @Composable
 private fun ProfileRow(
-    emoji: String,
+    icon: ImageVector,
     label: String,
     enabled: Boolean = true,
     note: String? = null,
@@ -149,7 +165,8 @@ private fun ProfileRow(
             Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(emoji, fontSize = 18.sp, modifier = Modifier.padding(end = 12.dp))
+            Icon(icon, contentDescription = null, modifier = Modifier.padding(end = 12.dp).size(20.dp),
+                tint = MaterialTheme.colorScheme.primary)
             Text(
                 label,
                 style = MaterialTheme.typography.bodyMedium,
@@ -197,7 +214,11 @@ private fun PasswordPage(
             .verticalScroll(rememberScrollState())
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("← Буцах") }
+            TextButton(onClick = onBack) {
+                Icon(Lucide.ArrowLeft, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Буцах")
+            }
             Text(
                 "Нууц үг солих",
                 style = MaterialTheme.typography.titleMedium,

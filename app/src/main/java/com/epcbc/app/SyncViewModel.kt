@@ -60,7 +60,7 @@ class SyncViewModel : ViewModel() {
         if (e is CancellationException) throw e
         if (e is RestException) return false
         OfflineQueue.enqueue(kind, targetId, hexes)
-        syncMessage = "📴 Сүлжээгүй — ${hexes.size} уншилт офлайн буферт хадгалагдлаа. " +
+        syncMessage = "Сүлжээгүй — ${hexes.size} уншилт офлайн буферт хадгалагдлаа. " +
             "Сүлжээ сэргэхэд автоматаар илгээгдэнэ (апп хаагдсан ч алдагдахгүй)."
         return true
     }
@@ -771,7 +771,7 @@ class SyncViewModel : ViewModel() {
                 (c["skipped"] ?: 0).takeIf { it > 0 }?.let { parts.add("алгассан: $it") }
                 val remaining = c["remaining"] ?: -1
                 syncMessage = parts.joinToString(" · ") +
-                    if (remaining == 0) " — БҮГД ИРЛЭЭ, гүйлгээ хаагдлаа ✅"
+                    if (remaining == 0) " — БҮГД ИРЛЭЭ, гүйлгээ хаагдлаа"
                     else " · үлдсэн: $remaining"
                 onSuccess?.invoke()
                 loadIncomingProgress(t.id, null)

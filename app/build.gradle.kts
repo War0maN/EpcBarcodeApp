@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.supabase.postgrest)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.lucide.icons)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

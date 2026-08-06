@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,6 +38,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Icon
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.History
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Package
+import com.composables.icons.lucide.RefreshCw
+import com.composables.icons.lucide.Upload
 import com.epcbc.net.ReceivingApi
 
 /**
@@ -130,10 +138,14 @@ fun ReceivingOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Button(onClick = onSubmit, enabled = !submitBusy && scannedCount > 0) {
-                            Text(if (submitBusy) "Илгээж байна…" else "⬆ Илгээх ($scannedCount)")
+                            if (!submitBusy) {
+                                Icon(Lucide.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(if (submitBusy) "Илгээж байна…" else "Илгээх ($scannedCount)")
                         }
                         Spacer(Modifier.weight(1f))
-                        OutlinedButton(onClick = onRefreshProgress, enabled = !progressLoading) { Text("↻") }
+                        OutlinedButton(onClick = onRefreshProgress, enabled = !progressLoading) { Icon(Lucide.RefreshCw, contentDescription = "Шинэчлэх", modifier = Modifier.size(18.dp)) }
                     }
                     Text(
                         "Скан хийгээд \"Илгээх\" дарна — давхардсан илгээлт аюулгүй (сервер алгасна).",
@@ -226,11 +238,11 @@ fun ReceivingOverlay(
                 // ---------- Цэс ----------
                 mode == "menu" -> {
                     Spacer(Modifier.height(4.dp))
-                    MenuCard("📦", "Нээлттэй ажлууд", "Ирсэн ачааг уншиж бүртгэнэ") {
+                    MenuCard(Lucide.Package, "Нээлттэй ажлууд", "Ирсэн ачааг уншиж бүртгэнэ") {
                         mode = "open"
                         onRefreshReceipts()
                     }
-                    MenuCard("🕘", "Түүх", "Хаагдсан ажлын дүн — уншсан/дутуу") {
+                    MenuCard(Lucide.History, "Түүх", "Хаагдсан ажлын дүн — уншсан/дутуу") {
                         mode = "history"
                         onRefreshClosed()
                     }
@@ -252,7 +264,9 @@ fun ReceivingOverlay(
                         if (branches.size > 1) {
                             Box {
                                 OutlinedButton(onClick = { branchMenuOpen = true }) {
-                                    Text("Салбар: ${branchFilter ?: "Бүгд"} ▾")
+                                    Text("Салбар: ${branchFilter ?: "Бүгд"}")
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp))
                                 }
                                 DropdownMenu(expanded = branchMenuOpen, onDismissRequest = { branchMenuOpen = false }) {
                                     DropdownMenuItem(text = { Text("Бүх салбар") },
@@ -265,7 +279,7 @@ fun ReceivingOverlay(
                             }
                         }
                         Spacer(Modifier.weight(1f))
-                        OutlinedButton(onClick = onRefreshReceipts, enabled = !receiptsLoading) { Text("↻") }
+                        OutlinedButton(onClick = onRefreshReceipts, enabled = !receiptsLoading) { Icon(Lucide.RefreshCw, contentDescription = "Шинэчлэх", modifier = Modifier.size(18.dp)) }
                     }
                     if (receipts.isEmpty() && !receiptsLoading) {
                         Text(
@@ -287,7 +301,7 @@ fun ReceivingOverlay(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Spacer(Modifier.weight(1f))
-                        OutlinedButton(onClick = onRefreshClosed, enabled = !closedLoading) { Text("↻") }
+                        OutlinedButton(onClick = onRefreshClosed, enabled = !closedLoading) { Icon(Lucide.RefreshCw, contentDescription = "Шинэчлэх", modifier = Modifier.size(18.dp)) }
                     }
                     if (closed.isEmpty() && !closedLoading) {
                         Text("Хаагдсан ажил алга.", modifier = Modifier.padding(top = 12.dp))

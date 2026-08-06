@@ -13,6 +13,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.collectAsState
 import androidx.activity.compose.BackHandler
@@ -36,6 +37,17 @@ import com.epcbc.app.ui.StRow
 import com.epcbc.app.ui.StocktakeOverlay
 import com.epcbc.app.ui.TxCartRow
 import com.epcbc.app.ui.TxDraftOverlay
+import com.composables.icons.lucide.ArrowLeft
+import com.composables.icons.lucide.ArrowRightLeft
+import com.composables.icons.lucide.FileCheck2
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Package
+import com.composables.icons.lucide.ClipboardList
+import com.composables.icons.lucide.Search
+import com.composables.icons.lucide.Settings
+import com.composables.icons.lucide.ShoppingCart
+import com.composables.icons.lucide.Trash2
+import com.composables.icons.lucide.Undo2
 import com.epcbc.app.ui.TxJobRow
 import com.epcbc.app.ui.SettingsDialog
 import com.epcbc.app.ui.SkuDetailOverlay
@@ -135,21 +147,21 @@ class MainActivity : ComponentActivity() {
                         outputPower = viewModel.outputPower,
                         offlineCount = OfflineQueue.count,
                         tiles = listOf(
-                            HomeTile("stocktake", "📋", "Тооллого",
+                            HomeTile("stocktake", Lucide.ClipboardList, "Тооллого",
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
-                            HomeTile("receiving", "📦", "Хүлээн авалт",
+                            HomeTile("receiving", Lucide.Package, "Хүлээн авалт",
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
-                            HomeTile("search", "🔍", "Хайлт"),
-                            HomeTile("check", "✅", "Шалгалт", subtitle = "файлтай тулгах"),
-                            HomeTile("transfer", "🔄", "Шилжүүлэг",
+                            HomeTile("search", Lucide.Search, "Хайлт"),
+                            HomeTile("check", Lucide.FileCheck2, "Шалгалт", subtitle = "файлтай тулгах"),
+                            HomeTile("transfer", Lucide.ArrowRightLeft, "Шилжүүлэг",
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
-                            HomeTile("writeoff", "🗑", "Актлалт",
+                            HomeTile("writeoff", Lucide.Trash2, "Актлалт",
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
-                            HomeTile("sale", "🛒", "Борлуулалт",
+                            HomeTile("sale", Lucide.ShoppingCart, "Борлуулалт",
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
-                            HomeTile("saleReturn", "↩️", "Буцаалт",
+                            HomeTile("saleReturn", Lucide.Undo2, "Буцаалт",
                                 subtitle = if (loggedIn) null else "нэвтрэх шаардлагатай", enabled = loggedIn),
-                            HomeTile("settings", "⚙️", "Тохиргоо"),
+                            HomeTile("settings", Lucide.Settings, "Тохиргоо"),
                         ),
                         onRetryReader = { viewModel.initReader() },
                         onOpenProfile = { screen = "profile" },
@@ -205,7 +217,11 @@ class MainActivity : ComponentActivity() {
                     )
                     else -> Column {
                     BackHandler(onBack = { screen = "home" })
-                    TextButton(onClick = { screen = "home" }) { Text("← Нүүр") }
+                    TextButton(onClick = { screen = "home" }) {
+                        androidx.compose.material3.Icon(Lucide.ArrowLeft, contentDescription = null,
+                            modifier = Modifier.size(16.dp))
+                        Text(" Нүүр")
+                    }
                     ScanScreen(
                         modifier = Modifier,
                         scannedEpcs = viewModel.scannedEpcs,

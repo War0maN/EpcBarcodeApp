@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -38,6 +39,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Icon
+import com.composables.icons.lucide.CheckCheck
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.History
+import com.composables.icons.lucide.Inbox
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.RefreshCw
+import com.composables.icons.lucide.ShoppingBasket
+import com.composables.icons.lucide.Trash2
+import com.composables.icons.lucide.X
 import com.epcbc.net.TxDraftApi
 
 /** Сагсны нэг мөр — бараагаар бүлэглэсэн (нэр × ширхэг). */
@@ -285,7 +297,11 @@ fun TxDraftOverlay(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Button(onClick = onReceiveScan, enabled = !submitBusy && pendingCount > 0) {
-                                Text(if (submitBusy) "Илгээж байна…" else "📥 Хүлээн авах ($pendingCount)")
+                                if (!submitBusy) {
+                                    Icon(Lucide.Inbox, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                Text(if (submitBusy) "Илгээж байна…" else "Хүлээн авах ($pendingCount)")
                             }
                         }
                         Row(
@@ -347,7 +363,7 @@ fun TxDraftOverlay(
                 mode == "menu" -> {
                     Spacer(Modifier.height(4.dp))
                     MenuCard(
-                        "＋", "Шинэ сагс",
+                        Lucide.Plus, "Шинэ сагс",
                         when (type) {
                             "transfer" -> "Эх/очих салбараа сонгоод сагс нээнэ"
                             "other" -> "Шалтгаанаа бичээд сагс нээнэ"
@@ -355,18 +371,18 @@ fun TxDraftOverlay(
                             else -> "Сагс нээгээд таг уншина"
                         },
                     ) { mode = "create" }
-                    MenuCard("🧺", "Нээлттэй сагсууд", "Эхэлсэн сагсаа үргэлжлүүлж уншина") {
+                    MenuCard(Lucide.ShoppingBasket, "Нээлттэй сагсууд", "Эхэлсэн сагсаа үргэлжлүүлж уншина") {
                         mode = "open"
                         onRefreshList()
                     }
                     if (isTransfer) {
                         // Шат 4: очих салбар дээр ирсэн ачааг уншиж хүлээн авна.
-                        MenuCard("📥", "Ирж буй шилжүүлэг", "Ирсэн ачааг уншиж хүлээн авна") {
+                        MenuCard(Lucide.Inbox, "Ирж буй шилжүүлэг", "Ирсэн ачааг уншиж хүлээн авна") {
                             mode = "incoming"
                             onRefreshIncoming()
                         }
                     }
-                    MenuCard("🕘", "Түүх", "Хийгдсэн гүйлгээнүүд (сүүлийн 30)") {
+                    MenuCard(Lucide.History, "Түүх", "Хийгдсэн гүйлгээнүүд (сүүлийн 30)") {
                         mode = "history"
                         onRefreshHistory()
                     }
@@ -395,7 +411,9 @@ fun TxDraftOverlay(
                     Spacer(Modifier.height(6.dp))
                     Box {
                         OutlinedButton(onClick = { fromMenuOpen = true }) {
-                            Text("Эх салбар: $fromLabel ▾")
+                            Text("Эх салбар: $fromLabel")
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp))
                         }
                         DropdownMenu(expanded = fromMenuOpen, onDismissRequest = { fromMenuOpen = false }) {
                             myBranches.forEach { b ->
@@ -419,7 +437,9 @@ fun TxDraftOverlay(
                     if (isTransfer) {
                         Box {
                             OutlinedButton(onClick = { destMenuOpen = true }) {
-                                Text("Очих салбар: ${branchName(toBranch) ?: "сонгоно уу"} ▾")
+                                Text("Очих салбар: ${branchName(toBranch) ?: "сонгоно уу"}")
+                                Spacer(Modifier.width(4.dp))
+                                Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp))
                             }
                             DropdownMenu(expanded = destMenuOpen, onDismissRequest = { destMenuOpen = false }) {
                                 branches.filter { it.id != effFrom }.forEach { b ->
@@ -474,7 +494,13 @@ fun TxDraftOverlay(
                             "other" -> note.trim().isNotEmpty()
                             else -> true
                         },
-                    ) { Text(if (submitBusy) "Нээж байна…" else "＋ Сагс нээх") }
+                    ) {
+                        if (!submitBusy) {
+                            Icon(Lucide.Plus, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(if (submitBusy) "Нээж байна…" else "Сагс нээх")
+                    }
                 }
 
                 // ---------- Нээлттэй сагсууд ----------
@@ -484,7 +510,7 @@ fun TxDraftOverlay(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Spacer(Modifier.weight(1f))
-                        OutlinedButton(onClick = onRefreshList, enabled = !draftsLoading) { Text("↻") }
+                        OutlinedButton(onClick = onRefreshList, enabled = !draftsLoading) { Icon(Lucide.RefreshCw, contentDescription = "Шинэчлэх", modifier = Modifier.size(18.dp)) }
                     }
                     if (drafts.isEmpty() && !draftsLoading) {
                         Text("Нээлттэй сагс алга — цэснээс шинээр нээнэ.", modifier = Modifier.padding(top = 12.dp))
@@ -525,7 +551,7 @@ fun TxDraftOverlay(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Spacer(Modifier.weight(1f))
-                        OutlinedButton(onClick = onRefreshIncoming, enabled = !incomingLoading) { Text("↻") }
+                        OutlinedButton(onClick = onRefreshIncoming, enabled = !incomingLoading) { Icon(Lucide.RefreshCw, contentDescription = "Шинэчлэх", modifier = Modifier.size(18.dp)) }
                     }
                     if (incoming.isEmpty() && !incomingLoading) {
                         Text("Хүлээгдэж буй шилжүүлэг алга.", modifier = Modifier.padding(top = 12.dp))
@@ -569,7 +595,7 @@ fun TxDraftOverlay(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Spacer(Modifier.weight(1f))
-                        OutlinedButton(onClick = onRefreshHistory, enabled = !historyLoading) { Text("↻") }
+                        OutlinedButton(onClick = onRefreshHistory, enabled = !historyLoading) { Icon(Lucide.RefreshCw, contentDescription = "Шинэчлэх", modifier = Modifier.size(18.dp)) }
                     }
                     if (history.isEmpty() && !historyLoading) {
                         Text("Гүйлгээ алга.", modifier = Modifier.padding(top = 12.dp))
@@ -655,7 +681,9 @@ private fun ActiveCart(
                 )
                 Box {
                     OutlinedButton(onClick = { destMenuOpen = true }) {
-                        Text("Очих: ${branchName(active.toBranch) ?: "сонгоно уу"} ▾")
+                        Text("Очих: ${branchName(active.toBranch) ?: "сонгоно уу"}")
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp))
                     }
                     DropdownMenu(expanded = destMenuOpen, onDismissRequest = { destMenuOpen = false }) {
                         branches.forEach { b ->
@@ -681,7 +709,11 @@ private fun ActiveCart(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Button(onClick = onScanToCart, enabled = !submitBusy && pendingCount > 0) {
-                Text(if (submitBusy) "Илгээж байна…" else "🧺 Сагслах ($pendingCount)")
+                if (!submitBusy) {
+                    Icon(Lucide.ShoppingBasket, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(if (submitBusy) "Илгээж байна…" else "Сагслах ($pendingCount)")
             }
         }
 
@@ -790,7 +822,9 @@ private fun ActiveCart(
                             }
                         }
                         Text("${r.count}", modifier = Modifier.width(48.dp), fontWeight = FontWeight.Bold)
-                        TextButton(onClick = { onRemoveProduct(r.productId) }) { Text("✕") }
+                        TextButton(onClick = { onRemoveProduct(r.productId) }) {
+                            Icon(Lucide.X, contentDescription = "Хасах", modifier = Modifier.size(16.dp))
+                        }
                     }
                     HorizontalDivider()
                 }
@@ -807,9 +841,15 @@ private fun ActiveCart(
                     onClick = { setConfirm("submit") },
                     enabled = !submitBusy && cartCount > 0 &&
                         (!isTransfer || active.toBranch != null),
-                ) { Text("✅ Гүйлгээ болгох ($cartCount)") }
+                ) {
+                    Icon(Lucide.CheckCheck, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Гүйлгээ болгох ($cartCount)")
+                }
                 OutlinedButton(onClick = { setConfirm("cancel") }, enabled = !submitBusy) {
-                    Text("🗑 Цуцлах")
+                    Icon(Lucide.Trash2, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Цуцлах")
                 }
             }
             if (isTransfer && active.toBranch == null) {
@@ -837,7 +877,7 @@ private fun ActiveCart(
                                 }
                             } уу?" +
                                 (if (jobRows.isNotEmpty() && shortfall > 0)
-                                    "\n⚠ Даалгаснаас $shortfall ширхэг ДУТУУ байна."
+                                    "\nДаалгаснаас $shortfall ширхэг ДУТУУ байна."
                                 else "")
                         else
                             "Сагсыг цуцлах уу? (Гүйлгээ үүсэхгүй, бараанд юу ч болохгүй.)",

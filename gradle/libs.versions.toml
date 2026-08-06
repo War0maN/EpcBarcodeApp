@@ -13,6 +13,8 @@ composeBom = "2026.02.01"
 supabase = "3.5.0"
 ktor = "3.4.2"
 coroutines = "1.10.2"
+# Lucide icons (Compose Multiplatform port) — 1.1.0 нь Kotlin 2.2 metadata-д таарна.
+lucide = "1.1.0"
 lifecycleViewmodelCompose = "2.6.1"
 
 [libraries]
@@ -36,6 +38,7 @@ supabase-auth = { group = "io.github.jan-tennert.supabase", name = "auth-kt" }
 supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt" }
 ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+lucide-icons = { group = "com.composables", name = "icons-lucide", version.ref = "lucide" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

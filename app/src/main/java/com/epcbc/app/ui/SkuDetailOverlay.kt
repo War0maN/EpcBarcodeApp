@@ -14,6 +14,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import com.composables.icons.lucide.Circle
+import com.composables.icons.lucide.CircleDot
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Pause
+import com.composables.icons.lucide.Play
+import com.composables.icons.lucide.X
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -168,7 +177,7 @@ fun SkuDetailOverlay(
                     trailingIcon = {
                         if (filterPrefix.isNotEmpty()) {
                             IconButton(onClick = { filterPrefix = "" }) {
-                                Text("✕", fontSize = 16.sp, color = Color(0xFF6B7280))
+                                Icon(Lucide.X, contentDescription = "Хаах", modifier = Modifier.size(18.dp), tint = Color(0xFF6B7280))
                             }
                         }
                     }
@@ -178,9 +187,14 @@ fun SkuDetailOverlay(
 
                 // Scanning state badge + filter explanation.
                 val (badgeBg, badgeFg, badgeText) = when {
-                    filterPrefix.isBlank() -> Triple(Color(0xFFF3F4F6), Color(0xFF6B7280), "○ Хязгаарлалтгүй")
-                    isScanning -> Triple(Color(0xFFDCFCE7), Color(0xFF166534), "● УНШИЖ БАЙНА")
-                    else -> Triple(Color(0xFFFEF3C7), Color(0xFFB45309), "⏸ ЗОГССОН")
+                    filterPrefix.isBlank() -> Triple(Color(0xFFF3F4F6), Color(0xFF6B7280), "Хязгаарлалтгүй")
+                    isScanning -> Triple(Color(0xFFDCFCE7), Color(0xFF166534), "УНШИЖ БАЙНА")
+                    else -> Triple(Color(0xFFFEF3C7), Color(0xFFB45309), "ЗОГССОН")
+                }
+                val badgeIcon = when {
+                    filterPrefix.isBlank() -> Lucide.Circle
+                    isScanning -> Lucide.CircleDot
+                    else -> Lucide.Pause
                 }
                 Surface(
                     color = badgeBg,
@@ -188,12 +202,17 @@ fun SkuDetailOverlay(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
-                        Text(
-                            text = badgeText,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = badgeFg
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(badgeIcon, contentDescription = null,
+                                modifier = Modifier.size(14.dp), tint = badgeFg)
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = badgeText,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = badgeFg
+                            )
+                        }
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = when {
@@ -264,8 +283,13 @@ fun SkuDetailOverlay(
                             containerColor = if (isScanning) Color(0xFFDC2626) else Color(0xFF16A34A)
                         )
                     ) {
+                        Icon(
+                            if (isScanning) Lucide.Pause else Lucide.Play,
+                            contentDescription = null, modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = if (isScanning) "⏸ Зогсоох" else "▶ Эхлүүлэх",
+                            text = if (isScanning) "Зогсоох" else "Эхлүүлэх",
                             fontWeight = FontWeight.Bold
                         )
                     }

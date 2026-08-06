@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,13 +25,19 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
+import com.composables.icons.lucide.CircleUserRound
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Radio
+import com.composables.icons.lucide.WifiOff
 
 /** Нүүрний нэг нүд. enabled=false → бүдэг, дарагдахгүй ("удахгүй"). */
 data class HomeTile(
     val key: String,
-    val emoji: String,
+    val icon: ImageVector,
     val title: String,
     val subtitle: String? = null,
     val enabled: Boolean = true,
@@ -72,7 +79,9 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = onOpenProfile) { Text("👤", fontSize = 20.sp) }
+                TextButton(onClick = onOpenProfile) {
+                    Icon(Lucide.CircleUserRound, contentDescription = "Профайл", modifier = Modifier.size(22.dp))
+                }
             }
 
             // Уншигчийн төлвийн мөр — бэлэн биш үед дарахад дахин оролдоно.
@@ -85,8 +94,7 @@ fun HomeScreen(
                     .let { m -> if (!readerReady) m.clickable { onRetryReader() } else m },
             ) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("📡", fontSize = 14.sp)
-                    Spacer(Modifier.height(0.dp))
+                    Icon(Lucide.Radio, contentDescription = null, tint = stripColor, modifier = Modifier.size(16.dp))
                     Text(
                         if (readerReady) "  Уншигч: бэлэн · $outputPower dBm"
                         else "  Уншигч: $readerStatus (дарж дахин оролдоно)",
@@ -108,7 +116,10 @@ fun HomeScreen(
                         Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("📴", fontSize = 14.sp)
+                        Icon(
+                            Lucide.WifiOff, contentDescription = null,
+                            tint = Color(0xFFD97706), modifier = Modifier.size(16.dp),
+                        )
                         Text(
                             "  Офлайн буфер: $offlineCount багц — сүлжээ сэргэхэд автоматаар илгээгдэнэ",
                             style = MaterialTheme.typography.bodySmall,
@@ -139,7 +150,11 @@ fun HomeScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {
-                            Text(tile.emoji, fontSize = 30.sp)
+                            Icon(
+                                tile.icon, contentDescription = null,
+                                modifier = Modifier.size(34.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
                             Spacer(Modifier.height(6.dp))
                             Text(tile.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                             tile.subtitle?.let {

@@ -9,6 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import com.composables.icons.lucide.ArrowLeft
+import com.composables.icons.lucide.Crosshair
+import com.composables.icons.lucide.Lucide
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -100,7 +106,11 @@ fun SearchScreen(
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Нүүр") }
+                TextButton(onClick = onBack) {
+                    Icon(Lucide.ArrowLeft, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Нүүр")
+                }
                 Text(
                     "Хайлт",
                     style = MaterialTheme.typography.titleMedium,
@@ -150,7 +160,12 @@ fun SearchScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                Text("🎯 Олох", color = MaterialTheme.colorScheme.primary)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Lucide.Crosshair, contentDescription = null,
+                                        modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Олох", color = MaterialTheme.colorScheme.primary)
+                                }
                             }
                         }
                     }
@@ -183,7 +198,11 @@ fun SearchScreen(
                         else onFind(clean)
                     },
                     modifier = Modifier.padding(start = 8.dp),
-                ) { Text("🎯 Олох") }
+                ) {
+                    Icon(Lucide.Crosshair, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Олох")
+                }
             }
         }
     }

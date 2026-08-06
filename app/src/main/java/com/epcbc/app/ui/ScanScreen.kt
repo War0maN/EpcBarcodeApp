@@ -9,6 +9,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import com.composables.icons.lucide.Crosshair
+import com.composables.icons.lucide.Download
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Settings
+import com.composables.icons.lucide.X
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -90,14 +97,16 @@ fun ScanScreen(
                 onClick = onOpenFinder,
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
             ) {
-                Text("🎯 Олох", fontSize = 12.sp)
+                Icon(Lucide.Crosshair, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Олох", fontSize = 12.sp)
             }
             Spacer(modifier = Modifier.width(4.dp))
             OutlinedButton(
                 onClick = onOpenSettings,
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
             ) {
-                Text("⚙", fontSize = 12.sp)
+                Icon(Lucide.Settings, contentDescription = "Тохиргоо", modifier = Modifier.size(14.dp))
             }
         }
         Spacer(modifier = Modifier.height(4.dp))
@@ -157,7 +166,8 @@ fun ScanScreen(
                     onClick = onClearPackingList,
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
-                    Text("✕", color = Color(0xFFDC2626))
+                    Icon(Lucide.X, contentDescription = "Цэвэрлэх", modifier = Modifier.size(14.dp),
+                        tint = Color(0xFFDC2626))
                 }
             }
         }
@@ -169,7 +179,9 @@ fun ScanScreen(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2E75B6))
             ) {
-                Text("📥 Excel рүү гаргах (CSV)", fontWeight = FontWeight.Bold)
+                Icon(Lucide.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Excel рүү гаргах (CSV)", fontWeight = FontWeight.Bold)
             }
         }
 

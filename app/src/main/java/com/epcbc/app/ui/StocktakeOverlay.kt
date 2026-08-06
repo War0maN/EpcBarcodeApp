@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,6 +42,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.ClipboardList
+import com.composables.icons.lucide.Crosshair
+import com.composables.icons.lucide.History
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Play
+import com.composables.icons.lucide.RefreshCw
+import com.composables.icons.lucide.Upload
 import com.epcbc.net.StocktakeApi
 import com.epcbc.net.TxDraftApi
 
@@ -262,15 +274,15 @@ fun StocktakeOverlay(
                 // ---------- Цэс ----------
                 mode == "menu" -> {
                     Spacer(Modifier.height(4.dp))
-                    MenuCard("▶️", "Тооллого эхлүүлэх", "Салбар сонгоод шинэ тооллого нээнэ") {
+                    MenuCard(Lucide.Play, "Тооллого эхлүүлэх", "Салбар сонгоод шинэ тооллого нээнэ") {
                         mode = "create"
                         if (stocktakes.isEmpty()) onRefreshList()
                     }
-                    MenuCard("📋", "Нээлттэй ажлууд", "Эхэлсэн тооллогоо үргэлжлүүлж тоолно") {
+                    MenuCard(Lucide.ClipboardList, "Нээлттэй ажлууд", "Эхэлсэн тооллогоо үргэлжлүүлж тоолно") {
                         mode = "open"
                         if (stocktakes.isEmpty()) onRefreshList()
                     }
-                    MenuCard("🕘", "Тооллогын түүх", "Хаагдсан тооллогын дүн — дутуу/илүү") {
+                    MenuCard(Lucide.History, "Тооллогын түүх", "Хаагдсан тооллогын дүн — дутуу/илүү") {
                         mode = "history"
                         onRefreshClosed()
                     }
@@ -286,7 +298,9 @@ fun StocktakeOverlay(
                     Spacer(Modifier.height(6.dp))
                     Box {
                         OutlinedButton(onClick = { menuOpen = true }) {
-                            Text("Салбар: ${branches.firstOrNull { it.id == branchId }?.name ?: "сонгоно уу"} ▾")
+                            Text("Салбар: ${branches.firstOrNull { it.id == branchId }?.name ?: "сонгоно уу"}")
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp))
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             branches.forEach { b ->
@@ -342,7 +356,9 @@ fun StocktakeOverlay(
                         if (listBranches.size > 1) {
                             Box {
                                 OutlinedButton(onClick = { branchMenuOpen = true }) {
-                                    Text("Салбар: ${branchFilter ?: "Бүгд"} ▾")
+                                    Text("Салбар: ${branchFilter ?: "Бүгд"}")
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(14.dp))
                                 }
                                 DropdownMenu(expanded = branchMenuOpen, onDismissRequest = { branchMenuOpen = false }) {
                                     DropdownMenuItem(text = { Text("Бүх салбар") },
@@ -355,7 +371,7 @@ fun StocktakeOverlay(
                             }
                         }
                         Spacer(Modifier.weight(1f))
-                        OutlinedButton(onClick = onRefreshList, enabled = !stocktakesLoading) { Text("↻") }
+                        OutlinedButton(onClick = onRefreshList, enabled = !stocktakesLoading) { Icon(Lucide.RefreshCw, contentDescription = "Шинэчлэх", modifier = Modifier.size(18.dp)) }
                     }
                     if (stocktakes.isEmpty() && !stocktakesLoading) {
                         Text("Нээлттэй тооллого алга — цэснээс шинээр эхлүүлнэ.", modifier = Modifier.padding(top = 12.dp))
@@ -375,7 +391,7 @@ fun StocktakeOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Spacer(Modifier.weight(1f))
-                        OutlinedButton(onClick = onRefreshClosed, enabled = !closedLoading) { Text("↻") }
+                        OutlinedButton(onClick = onRefreshClosed, enabled = !closedLoading) { Icon(Lucide.RefreshCw, contentDescription = "Шинэчлэх", modifier = Modifier.size(18.dp)) }
                     }
                     if (closed.isEmpty() && !closedLoading) {
                         Text("Хаагдсан тооллого алга.", modifier = Modifier.padding(top = 12.dp))
@@ -395,7 +411,7 @@ fun StocktakeOverlay(
 
 /** Цэсний нэг мөр-карт (Тооллого + гүйлгээний нүднүүд хуваалцана). */
 @Composable
-internal fun MenuCard(emoji: String, title: String, subtitle: String, onClick: () -> Unit) {
+internal fun MenuCard(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -403,7 +419,8 @@ internal fun MenuCard(emoji: String, title: String, subtitle: String, onClick: (
             .clickable { onClick() },
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(emoji, fontSize = 26.sp)
+            Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp),
+                tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(title, fontWeight = FontWeight.Bold)
@@ -533,10 +550,14 @@ private fun ActiveStocktake(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Button(onClick = onSubmit, enabled = !submitBusy && pendingCount > 0) {
-            Text(if (submitBusy) "Илгээж байна…" else "⬆ Илгээх ($pendingCount)")
+            if (!submitBusy) {
+                Icon(Lucide.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(if (submitBusy) "Илгээж байна…" else "Илгээх ($pendingCount)")
         }
         Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onRefreshProgress, enabled = !progressLoading) { Text("↻") }
+        OutlinedButton(onClick = onRefreshProgress, enabled = !progressLoading) { Icon(Lucide.RefreshCw, contentDescription = "Шинэчлэх", modifier = Modifier.size(18.dp)) }
     }
 
     FramedRow {
@@ -574,7 +595,9 @@ private fun ActiveStocktake(
                     fontWeight = if (done) FontWeight.Bold else FontWeight.Normal,
                 )
                 if (!done) {
-                    TextButton(onClick = { onFindMissing(r.productId) }) { Text("🎯") }
+                    TextButton(onClick = { onFindMissing(r.productId) }) {
+                        Icon(Lucide.Crosshair, contentDescription = "Олох", modifier = Modifier.size(18.dp))
+                    }
                 }
             }
             HorizontalDivider()
@@ -633,7 +656,7 @@ private fun HistoryDetail(
 
 /**
  * Нэг тоон статистик — тоо том, нэр нь тоотойгоо ИЖИЛ өнгөтэй (2026-08-05).
- * onClick өгвөл дарж дэлгэрэнгүй нээнэ (▸ тэмдэгтэй).
+ * onClick өгвөл дарж дэлгэрэнгүй нээнэ (chevron icon-той).
  */
 @Composable
 internal fun StStat(label: String, value: String, color: Color, onClick: (() -> Unit)? = null) {
@@ -642,10 +665,12 @@ internal fun StStat(label: String, value: String, color: Color, onClick: (() -> 
         modifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier,
     ) {
         Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = color)
-        Text(
-            label + if (onClick != null) " ▸" else "",
-            style = MaterialTheme.typography.bodySmall,
-            color = color,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.bodySmall, color = color)
+            if (onClick != null) {
+                Icon(Lucide.ChevronRight, contentDescription = null,
+                    modifier = Modifier.size(12.dp), tint = color)
+            }
+        }
     }
 }

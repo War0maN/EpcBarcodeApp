@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.X
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -102,7 +106,7 @@ fun FinderOverlay(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = if (label != null) "🎯 Олох: $label" else "🎯 Tag олох",
+                    text = if (label != null) "Олох: $label" else "Tag олох",
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = Color(0xFF111827)
@@ -111,7 +115,7 @@ fun FinderOverlay(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = if (remaining > 0) "Дутуу үлдсэн: $remaining ширхэг — олдмогц шууд тоологдоно."
-                               else "✓ Бүгд олдлоо!",
+                               else "Бүгд олдлоо!",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         color = if (remaining > 0) Color(0xFFD97706) else Color(0xFF059669)
@@ -142,7 +146,7 @@ fun FinderOverlay(
                     trailingIcon = {
                         if (targetEpc.isNotEmpty() && !active) {
                             IconButton(onClick = { onTargetChange("") }) {
-                                Text("✕", fontSize = 16.sp, color = Color(0xFF6B7280))
+                                Icon(Lucide.X, contentDescription = "Хаах", modifier = Modifier.size(18.dp), tint = Color(0xFF6B7280))
                             }
                         }
                     }

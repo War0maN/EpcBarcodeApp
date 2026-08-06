@@ -108,10 +108,10 @@ object OfflineQueue {
         }
         if (sentTags > 0 || dropped != null) {
             lastMessage = buildString {
-                if (sentTags > 0) append("Офлайн буферээс $sentTags уншилт илгээгдлээ ✅ (↻ дарж явцаа шинэчилнэ үү)")
+                if (sentTags > 0) append("Офлайн буферээс $sentTags уншилт илгээгдлээ — Шинэчлэх товчоор явцаа харна уу")
                 if (dropped != null) {
                     if (isNotEmpty()) append("\n")
-                    append("⚠ Зарим багцыг сервер татгалзав: $dropped")
+                    append("Зарим багцыг сервер татгалзав: $dropped")
                 }
             }
         }
