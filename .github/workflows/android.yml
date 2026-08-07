@@ -1,0 +1,60 @@
+# ============================================================
+# APK угсралт — GitHub дээр өөрөө хийгдэнэ (локал Android Studio ХЭРЭГГҮЙ).
+#   Push бүрт debug APK угсарч artifact болгон хавсаргана: Actions хуудас →
+#   тухайн ажил → доод талын "Artifacts" → epc-app-debug.zip татаж авна.
+#   C5 рүү зөөж (USB/Drive/имэйл) суулгаад турших боломжтой.
+#
+# Supabase холболт: app/build.gradle.kts нь local.properties-оос уншдаг тул
+# энд repo-гийн Secrets-ээс бүтээж өгнө (Settings → Secrets and variables →
+# Actions → New repository secret):
+#   SUPABASE_URL       = https://<төсөл>.supabase.co
+#   SUPABASE_ANON_KEY  = anon public түлхүүр
+# ⚠️ Secret байхгүй бол APK угсрагдана ч апп серверт холбогдож ЧАДАХГҮЙ.
+# ============================================================
+name: Android APK
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Gradle кэш
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Supabase тохиргоо (secrets → local.properties)
+        run: |
+          {
+            echo "supabase.url=${{ secrets.SUPABASE_URL }}"
+            echo "supabase.anonKey=${{ secrets.SUPABASE_ANON_KEY }}"
+          } > local.properties
+          if [ -z "${{ secrets.SUPABASE_URL }}" ]; then
+            echo "::warning::SUPABASE_URL secret алга — APK серверт холбогдохгүй."
+          fi
+
+      - name: Unit тест
+        run: ./gradlew test --no-daemon
+
+      - name: Debug APK угсрах
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: APK-г artifact болгож хавсаргах
+        uses: actions/upload-artifact@v4
+        with:
+          name: epc-app-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30
